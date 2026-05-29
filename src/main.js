@@ -8,6 +8,10 @@ import {
 } from './config.js';
 import { distToStation, nearestStation, playerNearStation, anyPlayerNearStation } from './geometry.js';
 import { canvas, ctx, clear, drawText, drawLine, drawRect, wrapText } from './canvas2d.js';
+import {
+  loadSkills, saveSkills, resetSkills, speedMultiplier,
+  processTimeMultiplier, subagentSlots, contextCostMultiplier, tryBuySkill,
+} from './skills.js';
 
 
 // ============================================================
@@ -19,42 +23,6 @@ import { canvas, ctx, clear, drawText, drawLine, drawRect, wrapText } from './ca
 // META-PROGRESSION: SKILLS (persistent across sessions)
 // ============================================================
 
-function loadSkills() {
-  try {
-    const raw = localStorage.getItem('agentKitchenSkills');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      return {
-        SPEED:    parsed.SPEED    || 0,
-        MODEL:    parsed.MODEL    || 0,
-        SUBAGENT: parsed.SUBAGENT || 0,
-        CONTEXT:  parsed.CONTEXT  || 0,
-        hours:    parsed.hours    || 0,
-      };
-    }
-  } catch (e) {}
-  return { SPEED: 0, MODEL: 0, SUBAGENT: 0, CONTEXT: 0, hours: 0 };
-}
-function saveSkills(skills) {
-  try { localStorage.setItem('agentKitchenSkills', JSON.stringify(skills)); } catch (e) {}
-}
-function resetSkills() {
-  try { localStorage.removeItem('agentKitchenSkills'); } catch (e) {}
-}
-
-// Effects derived from skill levels
-function speedMultiplier(skills) {
-  return 1 + skills.SPEED * 0.10;
-}
-function processTimeMultiplier(skills) {
-  return 1 - skills.MODEL * 0.15;
-}
-function subagentSlots(skills) {
-  return skills.SUBAGENT;
-}
-function contextCostMultiplier(skills) {
-  return 1 - (skills.CONTEXT || 0) * 0.10;
-}
 
 // Subagent gameplay constants
 
@@ -203,10 +171,10 @@ window.addEventListener('keydown', e => {
       if (k === 'y') { resetSkills(); state.skills = loadSkills(); state.shopResetConfirm = false; }
       if (k === 'n' || k === 'escape') state.shopResetConfirm = false;
     } else {
-      if (k === '1') tryBuySkill('SPEED');
-      if (k === '2') tryBuySkill('MODEL');
-      if (k === '3') tryBuySkill('SUBAGENT');
-      if (k === '4') tryBuySkill('CONTEXT');
+      if (k === '1') tryBuySkill(state, 'SPEED');
+      if (k === '2') tryBuySkill(state, 'MODEL');
+      if (k === '3') tryBuySkill(state, 'SUBAGENT');
+      if (k === '4') tryBuySkill(state, 'CONTEXT');
       if (k === 'r') state.shopResetConfirm = true;
       if (k === ' ' || k === 'enter' || k === 'escape') pendingMenuFromShop = true;
     }
@@ -1838,24 +1806,6 @@ function drawShop() {
   state.elapsed += 1/60;
 }
 
-function tryBuySkill(key) {
-  const skills = state.skills;
-  const def = SKILL_DEFS[key];
-  const level = skills[key];
-  if (level >= def.maxLevel) {
-    flash(W / 2, 320, 'MAX LEVEL', COL.muted);
-    return;
-  }
-  const cost = def.costs[level];
-  if ((skills.hours || 0) < cost) {
-    flash(W / 2, 320, 'NO HOURS', COL.red);
-    return;
-  }
-  skills.hours -= cost;
-  skills[key] += 1;
-  saveSkills(skills);
-  flash(W / 2, 320, '+1 ' + def.short, COL.accent);
-}
 
 function drawGameOver() {
   clear();
