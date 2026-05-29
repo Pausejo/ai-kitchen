@@ -1,0 +1,2291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AGENT KITCHEN — Vol. I, Issue 01</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,600;0,9..144,800;0,9..144,900;1,9..144,400;1,9..144,600&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>
+  :root {
+    --paper:   #ECE4D0;
+    --paper2:  #E2D8BD;
+    --ink:     #1A1611;
+    --ink2:    #2C2620;
+    --accent:  #C2410C;
+    --muted:   #6B6358;
+    --line:    #C4BAA0;
+    --ok:      #4A6B2C;
+    --warn:    #A88410;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-image:
+      radial-gradient(ellipse at 20% 30%, rgba(0,0,0,0.022) 0%, transparent 55%),
+      radial-gradient(ellipse at 80% 70%, rgba(0,0,0,0.028) 0%, transparent 55%);
+  }
+  #game {
+    width: min(100vw, calc(100vh * 1.6));
+    height: min(100vh, calc(100vw / 1.6));
+    display: block;
+    image-rendering: -webkit-optimize-contrast;
+  }
+  #loading {
+    position: fixed; inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--paper);
+    font-size: 11px;
+    letter-spacing: 0.3em;
+    color: var(--muted);
+    z-index: 10;
+  }
+  #loading.gone { display: none; }
+</style>
+</head>
+<body>
+<div id="loading">CARGANDO · LOADING · 載入中</div>
+<canvas id="game" width="1280" height="800"></canvas>
+<script>
+'use strict';
+
+// ============================================================
+// CONSTANTS
+// ============================================================
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+const TAU = Math.PI * 2;
+
+const COL = {
+  paper:   '#ECE4D0',
+  paper2:  '#E2D8BD',
+  paper3:  '#F4EEDD',
+  ink:     '#1A1611',
+  ink2:    '#2C2620',
+  inkSoft: 'rgba(26, 22, 17, 0.55)',
+  accent:  '#C2410C',
+  accentL: '#E89B7A',
+  muted:   '#6B6358',
+  line:    '#C4BAA0',
+  lineL:   '#D9CFB5',
+  ok:      '#4A6B2C',
+  warn:    '#A88410',
+  red:     '#8B2C20',
+  cardBg:  '#F7F1DE',
+};
+
+// ============================================================
+// META-PROGRESSION: SKILLS (persistent across sessions)
+// ============================================================
+const SKILL_DEFS = {
+  SPEED: {
+    label: 'VELOCIDAD',
+    short: 'SPEED',
+    desc: 'Más rápido al moverte entre estaciones.',
+    maxLevel: 5,
+    costs: [30, 50, 80, 120, 180],
+    effectText: l => `+${l * 10}% velocidad`,
+  },
+  MODEL: {
+    label: 'MODELO',
+    short: 'MODEL',
+    desc: 'Plan, TDD y Code procesan más rápido.',
+    maxLevel: 3,
+    costs: [60, 120, 240],
+    effectText: l => `-${l * 15}% tiempo de proceso`,
+  },
+  SUBAGENT: {
+    label: 'SUBAGENTES',
+    short: 'SUBAGENT',
+    desc: 'Cajas que envían PRs solos (lentos, sin contexto).',
+    maxLevel: 3,
+    costs: [80, 160, 320],
+    effectText: l => `${l} subagente${l === 1 ? '' : 's'} disponible${l === 1 ? '' : 's'}`,
+  },
+  CONTEXT: {
+    label: 'CONTEXTO',
+    short: 'CONTEXT',
+    desc: 'Cada acción consume menos ventana de contexto.',
+    maxLevel: 5,
+    costs: [40, 70, 110, 170, 240],
+    effectText: l => `-${l * 10}% coste por acción`,
+  },
+};
+
+function loadSkills() {
+  try {
+    const raw = localStorage.getItem('agentKitchenSkills');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        SPEED:    parsed.SPEED    || 0,
+        MODEL:    parsed.MODEL    || 0,
+        SUBAGENT: parsed.SUBAGENT || 0,
+        CONTEXT:  parsed.CONTEXT  || 0,
+        hours:    parsed.hours    || 0,
+      };
+    }
+  } catch (e) {}
+  return { SPEED: 0, MODEL: 0, SUBAGENT: 0, CONTEXT: 0, hours: 0 };
+}
+function saveSkills(skills) {
+  try { localStorage.setItem('agentKitchenSkills', JSON.stringify(skills)); } catch (e) {}
+}
+function resetSkills() {
+  try { localStorage.removeItem('agentKitchenSkills'); } catch (e) {}
+}
+
+// Effects derived from skill levels
+function speedMultiplier(skills) {
+  return 1 + skills.SPEED * 0.10;
+}
+function processTimeMultiplier(skills) {
+  return 1 - skills.MODEL * 0.15;
+}
+function subagentSlots(skills) {
+  return skills.SUBAGENT;
+}
+function contextCostMultiplier(skills) {
+  return 1 - (skills.CONTEXT || 0) * 0.10;
+}
+
+// Subagent gameplay constants
+const SUBAGENT_SPEED = 130;          // slower than player
+const SUBAGENT_PROCESS_MULT = 2.0;   // 2x the time at each station
+const SUBAGENT_DEPLOY_CTX = 5;       // small context cost to dispatch
+
+const FONT_SERIF = "'Fraunces'";
+const FONT_MONO  = "'JetBrains Mono'";
+
+// Claude logo SVG path (viewBox 0 0 24 24)
+const CLAUDE_PATH_DATA = "M4.709 15.955l4.72-2.647.08-.23-.08-.128H9.2l-.79-.048-2.698-.073-2.339-.097-2.266-.122-.571-.121L0 11.784l.055-.352.48-.321.686.06 1.52.103 2.278.158 1.652.097 2.449.255h.389l.055-.157-.134-.098-.103-.097-2.358-1.596-2.552-1.688-1.336-.972-.724-.491-.364-.462-.158-1.008.656-.722.881.06.225.061.893.686 1.908 1.476 2.491 1.833.365.304.145-.103.019-.073-.164-.274-1.355-2.446-1.446-2.49-.644-1.032-.17-.619a2.97 2.97 0 01-.104-.729L6.283.134 6.696 0l.996.134.42.364.62 1.414 1.002 2.229 1.555 3.03.456.898.243.832.091.255h.158V9.01l.128-1.706.237-2.095.23-2.695.08-.76.376-.91.747-.492.584.28.48.685-.067.444-.286 1.851-.559 2.903-.364 1.942h.212l.243-.242.985-1.306 1.652-2.064.73-.82.85-.904.547-.431h1.033l.76 1.129-.34 1.166-1.064 1.347-.881 1.142-1.264 1.7-.79 1.36.073.11.188-.02 2.856-.606 1.543-.28 1.841-.315.833.388.091.395-.328.807-1.969.486-2.309.462-3.439.813-.042.03.049.061 1.549.146.662.036h1.622l3.02.225.79.522.474.638-.079.485-1.215.62-1.64-.389-3.829-.91-1.312-.329h-.182v.11l1.093 1.068 2.006 1.81 2.509 2.33.127.578-.322.455-.34-.049-2.205-1.657-.851-.747-1.926-1.62h-.128v.17l.444.649 2.345 3.521.122 1.08-.17.353-.608.213-.668-.122-1.374-1.925-1.415-2.167-1.143-1.943-.14.08-.674 7.254-.316.37-.729.28-.607-.461-.322-.747.322-1.476.389-1.924.315-1.53.286-1.9.17-.632-.012-.042-.14.018-1.434 1.967-2.18 2.945-1.726 1.845-.414.164-.717-.37.067-.662.401-.589 2.388-3.036 1.44-1.882.93-1.086-.006-.158h-.055L4.132 18.56l-1.13.146-.487-.456.061-.746.231-.243 1.908-1.312-.006.006z";
+const CLAUDE_PATH = new Path2D(CLAUDE_PATH_DATA);
+
+// Player configurations (color, controls)
+const PLAYER_CONFIGS = [
+  {
+    id: 'C-1',
+    color: '#D97757',           // Claude orange
+    badge: '#1A1611',           // ink badge bg
+    label: 'C-1',
+    controls: {
+      up: 'w', down: 's', left: 'a', right: 'd',
+      interact: 'f', trash: 'q',
+    },
+  },
+  {
+    id: 'C-2',
+    color: '#3A8F8F',           // Deep teal
+    badge: '#1A1611',
+    label: 'C-2',
+    controls: {
+      up: 'arrowup', down: 'arrowdown', left: 'arrowleft', right: 'arrowright',
+      interact: '/', trash: '.',
+    },
+  },
+];
+
+// Game tuning
+const GAME_TIME = 120;
+const PLAYER_SPEED = 280; // px/sec
+const PLAYER_R = 17;
+const TICKET_LIFETIME_BUG = 35;
+const TICKET_LIFETIME_FEAT = 50;
+const CONTEXT_MAX = 100;
+const COMPACT_RATE = 35; // context units/sec
+const SPAWN_BASE = 5.5;
+const SPAWN_MIN = 2.6;
+
+const POINTS = {
+  BUG: 10,
+  FEATURE_NOTDD: 12,
+  FEATURE_TDD: 25,
+  EXPIRED: -8,
+};
+
+// Content
+const BUG_DESCS = [
+  "404 en /pricing",
+  "Botón roto en Safari",
+  "Logo pixelado",
+  "Login falla en móvil",
+  "Form sin validar",
+  "Margin descuadrado",
+  "Falta favicon",
+  "Typo en h1",
+  "Hover sin estado",
+  "Z-index al revés",
+];
+const FEAT_DESCS = [
+  "TikTok para gatos",
+  "IA pero no Claude",
+  "Modo oscuro premium",
+  "Hazlo viral",
+  "Blockchain genérico",
+  "Notion clone v2",
+  "Más Apple por favor",
+  "Onboarding inteligente",
+  "Chat con el equipo",
+  "Editor WYSIWYG",
+  "Login con magic link",
+  "Métricas en tiempo real",
+];
+
+// ============================================================
+// STATE
+// ============================================================
+let state = null;
+
+function newState(numPlayers = 1) {
+  const skills = loadSkills();
+  const players = [];
+  for (let i = 0; i < numPlayers; i++) {
+    const cfg = PLAYER_CONFIGS[i];
+    players.push({
+      cfg,
+      x: numPlayers === 1 ? W / 2 : (i === 0 ? W / 2 - 80 : W / 2 + 80),
+      y: 480,
+      vx: 0, vy: 0,
+      r: PLAYER_R,
+      holding: null,
+      trail: [],
+      pendingInteract: false,
+      pendingTrash: false,
+      stepPhase: 0,
+      isMoving: false,
+      faceX: 0,
+      faceY: 1,
+    });
+  }
+  // Build subagent slots (boxes) and subagent ghosts
+  const stations = makeStations();
+  const slots = subagentSlots(skills);
+  const subagentBoxes = [];
+  const subagents = [];
+  for (let i = 0; i < slots; i++) {
+    // Place subagent boxes along the bottom, left of COMPACT
+    const baseX = 80 + i * 140;
+    const box = {
+      id: 'SUBA_' + i, label: 'SUBAGENT ' + (i + 1), num: 'α' + (i + 1),
+      x: baseX, y: 600, w: 120, h: 110, kind: 'subagent_box',
+      subagentIdx: i,
+    };
+    stations.push(box);
+    subagents.push({
+      idx: i,
+      box,
+      state: 'idle',           // idle | toStation | working | toShip
+      x: baseX, y: 600,
+      vx: 0, vy: 0,
+      faceX: 0, faceY: -1,
+      stepPhase: 0,
+      isMoving: false,
+      ticket: null,
+      target: null,            // station object to walk to
+      processStart: 0,
+      processDuration: 0,
+      stage: null,             // current pipeline stage being processed
+    });
+  }
+  // Apply model multiplier to process stations
+  const mult = processTimeMultiplier(skills);
+  for (const s of stations) {
+    if (s.kind === 'process') s.time = s.baseTime * mult;
+  }
+  return {
+    phase: 'menu',
+    menuPlayers: numPlayers,
+    elapsed: 0,
+    timeLeft: GAME_TIME,
+    score: 0,
+    context: 0,
+    skills,
+    players,
+    subagents,
+    stations,
+    inbox: [],
+    nextSpawnIn: numPlayers === 1 ? 1.5 : 2.5,
+    nextTicketId: 1,
+    flashes: [],
+    shipped: 0,
+    expired: 0,
+    perfectFeatures: 0,
+    bestScore: parseInt(localStorage.getItem('agentKitchenBest') || '0', 10),
+    learningPhase: numPlayers === 1,
+    learningTimer: 0,
+    learningTicketIdx: 0,
+  };
+}
+
+// Tutorial ticket scripts — assigned to the first 5 tickets in 1P mode
+const TUTORIAL_TICKETS = [
+  { type: 'BUG',     desc: 'Botón no clickea',     hint: 'PICK · PLAN → CODE → PR · +10' },
+  { type: 'BUG',     desc: 'Typo en el footer',    hint: 'MISMO FLUJO · PRACTICA' },
+  { type: 'FEATURE', desc: 'Modo oscuro premium',  hint: 'TDD → 2X BONUS · +25' },
+  { type: 'FEATURE', desc: 'Login con Google',     hint: 'OJO AL CONTEXTO · COMPACT LIMPIA' },
+  { type: 'BUG',     desc: 'Layout roto en iPad',  hint: 'ÚLTIMA FÁCIL · EL RITMO SUBE YA' },
+];
+
+function makeStations() {
+  // Top row of process stations
+  return [
+    { id: 'INBOX',   label: 'INBOX',    num: '00', x: 220,  y: 330, w: 150, h: 110, kind: 'inbox' },
+    { id: 'PLAN',    label: 'PLAN',     num: '01', x: 420,  y: 330, w: 150, h: 110, kind: 'process',
+      baseTime: 2.0, time: 2.0, stage: 'planned', requires: null, contextCost: 14, capacity: 3, queue: [], accept: ['BUG','FEATURE'] },
+    { id: 'TDD',     label: 'TDD',      num: '02', x: 620,  y: 330, w: 150, h: 110, kind: 'process',
+      baseTime: 2.4, time: 2.4, stage: 'tested',  requires: 'planned', contextCost: 12, capacity: 3, queue: [], accept: ['FEATURE'], featureOnly: true },
+    { id: 'CODE',    label: 'CODE',     num: '03', x: 820,  y: 330, w: 150, h: 110, kind: 'process',
+      baseTime: 3.0, time: 3.0, stage: 'coded',   requires: 'planned', contextCost: 24, capacity: 3, queue: [], accept: ['BUG','FEATURE'] },
+    { id: 'PR',      label: 'SHIP PR',  num: '04', x: 1050, y: 330, w: 180, h: 110, kind: 'ship',   holds: null },
+    { id: 'COMPACT', label: 'COMPACT',  num: '∞',  x: 870,  y: 600, w: 200, h: 110, kind: 'compact' },
+  ];
+}
+
+// ============================================================
+// INPUT
+// ============================================================
+const keys = {};
+let pendingStart = false;
+let pendingShopOpen = false;
+let pendingMenuFromShop = false;
+
+window.addEventListener('keydown', e => {
+  if (!state) return;
+  const k = e.key.toLowerCase();
+  keys[k] = true;
+
+  // Prevent default for game keys
+  if (['arrowup','arrowdown','arrowleft','arrowright',' ','/'].includes(k)) {
+    e.preventDefault();
+  }
+
+  if (state.phase === 'playing') {
+    // Per-player interact / trash
+    for (const p of state.players) {
+      if (k === p.cfg.controls.interact) p.pendingInteract = true;
+      if (k === p.cfg.controls.trash)    p.pendingTrash = true;
+    }
+  } else if (state.phase === 'gameover') {
+    if (k === 's') pendingShopOpen = true;
+    if (k === ' ' || k === 'enter') pendingStart = true;
+  } else if (state.phase === 'shop') {
+    if (state.shopResetConfirm) {
+      if (k === 'y') { resetSkills(); state.skills = loadSkills(); state.shopResetConfirm = false; }
+      if (k === 'n' || k === 'escape') state.shopResetConfirm = false;
+    } else {
+      if (k === '1') tryBuySkill('SPEED');
+      if (k === '2') tryBuySkill('MODEL');
+      if (k === '3') tryBuySkill('SUBAGENT');
+      if (k === '4') tryBuySkill('CONTEXT');
+      if (k === 'r') state.shopResetConfirm = true;
+      if (k === ' ' || k === 'enter' || k === 'escape') pendingMenuFromShop = true;
+    }
+  } else {
+    // Menu
+    if (k === '1') state.menuPlayers = 1;
+    if (k === '2') state.menuPlayers = 2;
+    if (k === ' ' || k === 'enter') pendingStart = true;
+  }
+});
+window.addEventListener('keyup', e => {
+  if (!state) return;
+  keys[e.key.toLowerCase()] = false;
+});
+
+function getInputDirFor(player) {
+  const c = player.cfg.controls;
+  let x = 0, y = 0;
+  if (keys[c.left])  x -= 1;
+  if (keys[c.right]) x += 1;
+  if (keys[c.up])    y -= 1;
+  if (keys[c.down])  y += 1;
+  if (x && y) { x *= 0.7071; y *= 0.7071; }
+  return { x, y };
+}
+
+// ============================================================
+// LOGIC
+// ============================================================
+function makeTicket() {
+  // Tutorial-scripted ticket
+  if (state.learningPhase && state.learningTicketIdx < TUTORIAL_TICKETS.length) {
+    const scripted = TUTORIAL_TICKETS[state.learningTicketIdx++];
+    const lifetime = 90;
+    return {
+      id: state.nextTicketId++,
+      type: scripted.type,
+      desc: scripted.desc,
+      hint: scripted.hint,
+      stages: new Set(),
+      timeLeft: lifetime,
+      maxTime: lifetime,
+    };
+  }
+  // Normal random ticket
+  const isFeature = Math.random() < 0.55;
+  const type = isFeature ? 'FEATURE' : 'BUG';
+  const arr = isFeature ? FEAT_DESCS : BUG_DESCS;
+  const desc = arr[Math.floor(Math.random() * arr.length)];
+  const lifetime = isFeature ? TICKET_LIFETIME_FEAT : TICKET_LIFETIME_BUG;
+  return {
+    id: state.nextTicketId++,
+    type, desc,
+    stages: new Set(),
+    timeLeft: lifetime,
+    maxTime: lifetime,
+  };
+}
+
+function spawnIfDue(dt) {
+  state.nextSpawnIn -= dt;
+  if (state.nextSpawnIn <= 0) {
+    // During learning, cap concurrent tickets
+    if (state.learningPhase) {
+      const inFlight = state.inbox.length +
+        state.players.filter(p => p.holding).length +
+        state.stations
+          .filter(s => s.kind === 'process')
+          .reduce((sum, s) => sum + s.queue.length, 0);
+      if (inFlight >= 2) {
+        state.nextSpawnIn = 1.0;
+        return;
+      }
+      state.inbox.push(makeTicket());
+      state.nextSpawnIn = 8.0;
+      return;
+    }
+    // Normal: ramp up with game progress
+    state.inbox.push(makeTicket());
+    const progress = state.elapsed / GAME_TIME;
+    const rate = SPAWN_BASE - (SPAWN_BASE - SPAWN_MIN) * progress;
+    state.nextSpawnIn = rate * (0.85 + Math.random() * 0.3);
+  }
+}
+
+function distToStation(p, s) {
+  // Distance from point to nearest edge of station rect
+  const dx = Math.max(s.x - s.w/2 - p.x, 0, p.x - (s.x + s.w/2));
+  const dy = Math.max(s.y - s.h/2 - p.y, 0, p.y - (s.y + s.h/2));
+  return Math.sqrt(dx*dx + dy*dy);
+}
+
+function nearestStation(p, maxDist = 24) {
+  let best = null, bestD = Infinity;
+  for (const s of state.stations) {
+    const d = distToStation(p, s);
+    if (d < bestD && d <= maxDist) { best = s; bestD = d; }
+  }
+  return best;
+}
+
+function playerNearStation(player, s) {
+  return distToStation(player, s) <= 28;
+}
+
+function anyPlayerNearStation(s) {
+  return state.players.some(p => playerNearStation(p, s));
+}
+
+function updateContext(dt) {
+  // Any player standing still at COMPACT drains context
+  const cs = state.stations.find(s => s.id === 'COMPACT');
+  let draining = false;
+  for (const p of state.players) {
+    const near = playerNearStation(p, cs);
+    const moving = Math.abs(p.vx) + Math.abs(p.vy) > 1;
+    if (near && !moving) { draining = true; break; }
+  }
+  if (draining) {
+    state.context = Math.max(0, state.context - COMPACT_RATE * dt);
+  }
+}
+
+function updatePlayers(dt) {
+  const speedMult = speedMultiplier(state.skills);
+  for (const p of state.players) {
+    const dir = getInputDirFor(p);
+    p.vx = dir.x * PLAYER_SPEED * speedMult;
+    p.vy = dir.y * PLAYER_SPEED * speedMult;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    // Track running animation
+    p.isMoving = Math.abs(p.vx) + Math.abs(p.vy) > 1;
+    if (p.isMoving) {
+      p.stepPhase += dt * 15;
+      // Update facing direction (normalized)
+      const len = Math.sqrt(p.vx * p.vx + p.vy * p.vy) || 1;
+      p.faceX = p.vx / len;
+      p.faceY = p.vy / len;
+    }
+    // Clamp to play area
+    const padX = 30;
+    const playTop = 230, playBot = 720;
+    p.x = Math.max(padX, Math.min(W - padX, p.x));
+    p.y = Math.max(playTop + 30, Math.min(playBot - 30, p.y));
+    // Resolve station collisions (push-out)
+    for (const s of state.stations) {
+      const left = s.x - s.w/2, right = s.x + s.w/2;
+      const top = s.y - s.h/2, bot = s.y + s.h/2;
+      const closestX = Math.max(left, Math.min(p.x, right));
+      const closestY = Math.max(top, Math.min(p.y, bot));
+      const dx = p.x - closestX;
+      const dy = p.y - closestY;
+      const d2 = dx*dx + dy*dy;
+      if (d2 < p.r * p.r) {
+        const d = Math.sqrt(d2) || 0.001;
+        const push = p.r - d;
+        p.x += (dx / d) * push;
+        p.y += (dy / d) * push;
+      }
+    }
+    // Trail
+    p.trail.push({ x: p.x, y: p.y, a: 1 });
+    if (p.trail.length > 14) p.trail.shift();
+    for (const t of p.trail) t.a *= 0.88;
+  }
+  // Player-vs-player collision (push apart)
+  if (state.players.length === 2) {
+    const a = state.players[0], b = state.players[1];
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const d2 = dx*dx + dy*dy;
+    const minD = a.r + b.r;
+    if (d2 < minD * minD && d2 > 0.0001) {
+      const d = Math.sqrt(d2);
+      const push = (minD - d) / 2;
+      const nx = dx / d, ny = dy / d;
+      a.x -= nx * push; a.y -= ny * push;
+      b.x += nx * push; b.y += ny * push;
+    }
+  }
+}
+
+function updateSubagents(dt) {
+  for (const sa of state.subagents) {
+    if (sa.state === 'idle') {
+      sa.isMoving = false;
+      continue;
+    }
+    if (sa.state === 'toStation' || sa.state === 'toShip' || sa.state === 'returning') {
+      // Move toward target
+      const tx = sa.target ? sa.target.x : sa.box.x;
+      const ty = sa.target ? sa.target.y : sa.box.y;
+      const dx = tx - sa.x, dy = ty - sa.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < 6) {
+        // Arrived
+        if (sa.state === 'toStation') {
+          handleSubagentArrival(sa);
+        } else if (sa.state === 'toShip') {
+          handleSubagentShip(sa);
+        } else if (sa.state === 'returning') {
+          sa.x = sa.box.x; sa.y = sa.box.y;
+          sa.state = 'idle';
+          sa.target = null;
+          sa.isMoving = false;
+        }
+      } else {
+        const nx = dx / dist, ny = dy / dist;
+        sa.vx = nx * SUBAGENT_SPEED;
+        sa.vy = ny * SUBAGENT_SPEED;
+        sa.x += sa.vx * dt;
+        sa.y += sa.vy * dt;
+        sa.faceX = nx;
+        sa.faceY = ny;
+        sa.isMoving = true;
+        sa.stepPhase += dt * 12;
+      }
+    } else if (sa.state === 'waiting') {
+      // Standing at a station, queue is full. Re-check periodically.
+      sa.isMoving = false;
+      const target = sa.target;
+      if (target.queue.length < target.capacity) {
+        // Drop in now
+        sa.state = 'working';
+        target.queue.push({ ticket: sa.ticket, progress: 0, isSubagent: true, processMult: SUBAGENT_PROCESS_MULT });
+        sa.ticket = null; // it lives in the station queue now
+      }
+    } else if (sa.state === 'working') {
+      // Wait until our ticket has been processed in the target station, then pick it up.
+      sa.isMoving = false;
+      const target = sa.target;
+      // Find our entry (we marked it with isSubagent and subagentIdx)
+      const entry = target.queue.find(e => e.isSubagent && e.subagentRef === sa);
+      if (!entry) {
+        // We were just pushed — tag it now
+        const lastEntry = target.queue[target.queue.length - 1];
+        if (lastEntry && lastEntry.isSubagent && !lastEntry.subagentRef) {
+          lastEntry.subagentRef = sa;
+        }
+      } else if (entry.progress >= 1 && target.queue[0] === entry) {
+        // Our ticket is the front and done — grab it
+        sa.ticket = entry.ticket;
+        target.queue.shift();
+        // Decide next step
+        const next = pickSubagentNextStation(sa);
+        if (next.kind === 'ship') {
+          sa.state = 'toShip';
+          sa.target = next;
+        } else {
+          sa.state = 'toStation';
+          sa.target = next;
+        }
+      }
+    }
+  }
+}
+
+function handleSubagentArrival(sa) {
+  const target = sa.target;
+  if (target.queue.length >= target.capacity) {
+    sa.state = 'waiting';
+    return;
+  }
+  // Push ticket into queue with subagent flag
+  target.queue.push({
+    ticket: sa.ticket,
+    progress: 0,
+    isSubagent: true,
+    subagentRef: sa,
+    processMult: SUBAGENT_PROCESS_MULT,
+  });
+  sa.ticket = null;
+  sa.state = 'working';
+}
+
+function handleSubagentShip(sa) {
+  const t = sa.ticket;
+  if (!t || !t.stages.has('coded')) {
+    // Shouldn't happen, but safety net: dump ticket
+    sa.ticket = null;
+    sa.state = 'returning';
+    sa.target = null;
+    return;
+  }
+  let pts;
+  if (t.type === 'BUG') pts = POINTS.BUG;
+  else if (t.stages.has('tested')) { pts = POINTS.FEATURE_TDD; state.perfectFeatures++; }
+  else pts = POINTS.FEATURE_NOTDD;
+  state.score += pts;
+  state.shipped++;
+  flash(sa.target.x, sa.target.y - sa.target.h/2 - 16, '+' + pts + ' [α]', COL.accent);
+  sa.ticket = null;
+  sa.state = 'returning';
+  sa.target = null;
+  if (state.learningPhase && state.shipped >= 5) {
+    state.learningPhase = false;
+    flash(W / 2, 270, 'TUTORIAL · DONE — PACE UP', COL.accent);
+    state.nextSpawnIn = Math.min(state.nextSpawnIn, 3.0);
+  }
+}
+
+function updateStations(dt) {
+  for (const s of state.stations) {
+    if (s.kind !== 'process' || s.queue.length === 0) continue;
+    const front = s.queue[0];
+    if (front.progress >= 1) continue;
+    // Context-based speed multiplier (only affects player work, NOT subagents)
+    let ctxMult = 1;
+    if (!front.isSubagent) {
+      if (state.context > 80) ctxMult = 0.6;
+      else if (state.context > 60) ctxMult = 0.85;
+    }
+    const procMult = front.processMult || 1;
+    front.progress += (dt / (s.time * procMult)) * ctxMult;
+    if (front.progress >= 1) {
+      front.progress = 1;
+      front.ticket.stages.add(s.stage);
+      flash(s.x, s.y - s.h/2 - 16, '+' + s.stage.toUpperCase() + (front.isSubagent ? ' [α]' : ''), COL.ok);
+    }
+  }
+}
+
+function updateTickets(dt) {
+  // Inbox tickets count down (lose if forgotten)
+  for (let i = state.inbox.length - 1; i >= 0; i--) {
+    state.inbox[i].timeLeft -= dt;
+    if (state.inbox[i].timeLeft <= 0) {
+      state.score += POINTS.EXPIRED;
+      state.expired++;
+      flash(state.stations.find(s => s.id === 'INBOX').x, 280, 'EXPIRED', COL.red);
+      state.inbox.splice(i, 1);
+    }
+  }
+  // Each player's held ticket counts down
+  for (const p of state.players) {
+    if (p.holding) {
+      p.holding.timeLeft -= dt;
+      if (p.holding.timeLeft <= 0) {
+        state.score += POINTS.EXPIRED;
+        state.expired++;
+        flash(p.x, p.y - 30, 'EXPIRED', COL.red);
+        p.holding = null;
+      }
+    }
+  }
+  // Tickets in station queues also count down (every ticket, not just the front)
+  for (const s of state.stations) {
+    if (s.kind !== 'process') continue;
+    for (let i = s.queue.length - 1; i >= 0; i--) {
+      const entry = s.queue[i];
+      entry.ticket.timeLeft -= dt;
+      if (entry.ticket.timeLeft <= 0) {
+        state.score += POINTS.EXPIRED;
+        state.expired++;
+        flash(s.x, s.y - s.h/2 - 16, 'EXPIRED', COL.red);
+        s.queue.splice(i, 1);
+      }
+    }
+  }
+}
+
+function flash(x, y, text, color) {
+  state.flashes.push({ x, y, text, color, life: 1.0 });
+}
+
+function updateFlashes(dt) {
+  for (let i = state.flashes.length - 1; i >= 0; i--) {
+    const f = state.flashes[i];
+    f.life -= dt * 1.3;
+    f.y -= dt * 30;
+    if (f.life <= 0) state.flashes.splice(i, 1);
+  }
+}
+
+function handleInteract() {
+  for (const p of state.players) {
+    if (!p.pendingInteract) continue;
+    p.pendingInteract = false;
+    const s = nearestStation(p);
+    if (!s) continue;
+    doInteract(p, s);
+  }
+}
+
+function doInteract(p, s) {
+  if (s.kind === 'inbox') {
+    if (!p.holding && state.inbox.length > 0) {
+      p.holding = state.inbox.shift();
+      flash(s.x, s.y - s.h/2 - 16, 'PICKED', COL.ink);
+    } else if (p.holding) {
+      // Trash held ticket back at INBOX
+      state.score += POINTS.EXPIRED;
+      state.expired++;
+      flash(s.x, s.y - s.h/2 - 16, 'TRASHED', COL.red);
+      p.holding = null;
+    }
+    return;
+  }
+
+  if (s.kind === 'process') {
+    // Pickup completed (front of queue, only if done)
+    if (!p.holding && s.queue.length > 0 && s.queue[0].progress >= 1) {
+      const entry = s.queue[0];
+      p.holding = entry.ticket;
+      // If this was a subagent's ticket, the subagent gives up / returns
+      if (entry.isSubagent && entry.subagentRef) {
+        entry.subagentRef.state = 'returning';
+        entry.subagentRef.target = null;
+        entry.subagentRef.ticket = null;
+      }
+      s.queue.shift();
+      flash(s.x, s.y - s.h/2 - 16, 'PICKED', COL.ink);
+      return;
+    }
+    // Drop into queue
+    if (p.holding) {
+      if (s.queue.length >= s.capacity) {
+        flash(s.x, s.y - s.h/2 - 16, 'QUEUE FULL', COL.red);
+        return;
+      }
+      if (state.context >= CONTEXT_MAX) {
+        flash(s.x, s.y - s.h/2 - 16, 'CTX FULL', COL.red);
+        return;
+      }
+      if (s.accept && !s.accept.includes(p.holding.type)) {
+        flash(s.x, s.y - s.h/2 - 16, 'WRONG TYPE', COL.red);
+        return;
+      }
+      if (s.requires && !p.holding.stages.has(s.requires)) {
+        flash(s.x, s.y - s.h/2 - 16, 'NEEDS ' + s.requires.toUpperCase(), COL.red);
+        return;
+      }
+      if (p.holding.stages.has(s.stage)) {
+        flash(s.x, s.y - s.h/2 - 16, 'DONE', COL.warn);
+        return;
+      }
+      s.queue.push({ ticket: p.holding, progress: 0 });
+      p.holding = null;
+      const ctxCost = s.contextCost * contextCostMultiplier(state.skills);
+      state.context = Math.min(CONTEXT_MAX, state.context + ctxCost);
+      return;
+    }
+    // Empty-handed at station with queue but front not done
+    if (s.queue.length > 0 && s.queue[0].progress < 1) {
+      flash(s.x, s.y - s.h/2 - 16, 'WORKING', COL.warn);
+    }
+  }
+
+  if (s.kind === 'ship') {
+    if (!p.holding) {
+      flash(s.x, s.y - s.h/2 - 16, 'NO TICKET', COL.warn);
+      return;
+    }
+    if (!p.holding.stages.has('coded')) {
+      flash(s.x, s.y - s.h/2 - 16, 'NEEDS CODED', COL.red);
+      return;
+    }
+    const t = p.holding;
+    let pts;
+    if (t.type === 'BUG') pts = POINTS.BUG;
+    else if (t.stages.has('tested')) {
+      pts = POINTS.FEATURE_TDD;
+      state.perfectFeatures++;
+    } else pts = POINTS.FEATURE_NOTDD;
+    state.score += pts;
+    state.shipped++;
+    flash(s.x, s.y - s.h/2 - 16, '+' + pts, COL.accent);
+    p.holding = null;
+    state.context = Math.min(CONTEXT_MAX, state.context + 4 * contextCostMultiplier(state.skills));
+    // End tutorial after 5 shipped
+    if (state.learningPhase && state.shipped >= 5) {
+      state.learningPhase = false;
+      flash(W / 2, 270, 'TUTORIAL · DONE — PACE UP', COL.accent);
+      state.nextSpawnIn = Math.min(state.nextSpawnIn, 3.0);
+    }
+  }
+
+  if (s.kind === 'compact') {
+    flash(s.x, s.y - s.h/2 - 16, 'AUTO', COL.muted);
+  }
+
+  if (s.kind === 'subagent_box') {
+    const sa = state.subagents[s.subagentIdx];
+    // Pickup if subagent has returned a finished ticket... not currently used,
+    // subagents auto-ship. But handle anyway: if pickup of result is needed, here.
+    if (!p.holding) {
+      // Empty interact — show status
+      if (sa.state === 'idle') flash(s.x, s.y - s.h/2 - 16, 'IDLE', COL.muted);
+      else flash(s.x, s.y - s.h/2 - 16, 'BUSY · ' + sa.state.toUpperCase(), COL.warn);
+      return;
+    }
+    // Drop ticket to subagent
+    if (sa.state !== 'idle') {
+      flash(s.x, s.y - s.h/2 - 16, 'BUSY', COL.red);
+      return;
+    }
+    if (state.context >= CONTEXT_MAX) {
+      flash(s.x, s.y - s.h/2 - 16, 'CTX FULL', COL.red);
+      return;
+    }
+    // Dispatch subagent
+    sa.ticket = p.holding;
+    p.holding = null;
+    state.context = Math.min(CONTEXT_MAX, state.context + SUBAGENT_DEPLOY_CTX * contextCostMultiplier(state.skills));
+    // Decide first target based on ticket state
+    sa.state = 'toStation';
+    sa.target = pickSubagentNextStation(sa);
+    flash(s.x, s.y - s.h/2 - 16, 'DISPATCHED', COL.accent);
+  }
+}
+
+// Decide next station for subagent based on ticket type and stages
+function pickSubagentNextStation(sa) {
+  const t = sa.ticket;
+  if (!t.stages.has('planned')) return state.stations.find(s => s.id === 'PLAN');
+  if (t.type === 'FEATURE' && !t.stages.has('tested') && !t.stages.has('coded')) {
+    return state.stations.find(s => s.id === 'TDD');
+  }
+  if (!t.stages.has('coded')) return state.stations.find(s => s.id === 'CODE');
+  return state.stations.find(s => s.id === 'PR');
+}
+
+function handleTrash() {
+  for (const p of state.players) {
+    if (!p.pendingTrash) continue;
+    p.pendingTrash = false;
+    if (p.holding) {
+      state.score += POINTS.EXPIRED;
+      state.expired++;
+      flash(p.x, p.y - 30, 'TRASHED', COL.red);
+      p.holding = null;
+    }
+  }
+}
+
+function update(dt) {
+  state.elapsed += dt;
+  state.timeLeft = Math.max(0, GAME_TIME - state.elapsed);
+  // Learning phase auto-end after 60s
+  if (state.learningPhase) {
+    state.learningTimer += dt;
+    if (state.learningTimer >= 60) {
+      state.learningPhase = false;
+      flash(W / 2, 270, 'PACE UP', COL.accent);
+    }
+  }
+  updatePlayers(dt);
+  updateSubagents(dt);
+  spawnIfDue(dt);
+  updateStations(dt);
+  updateContext(dt);
+  updateTickets(dt);
+  handleInteract();
+  handleTrash();
+  updateFlashes(dt);
+  if (state.timeLeft <= 0) {
+    if (state.phase === 'playing') {
+      // Transition to gameover: award hours and persist
+      const earnedHours = Math.max(0, state.score);
+      state.earnedHours = earnedHours;
+      state.skills.hours = (state.skills.hours || 0) + earnedHours;
+      saveSkills(state.skills);
+      state.phase = 'gameover';
+      if (state.score > state.bestScore) {
+        state.bestScore = state.score;
+        try { localStorage.setItem('agentKitchenBest', String(state.score)); } catch (e) {}
+      }
+    }
+  }
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function clear() {
+  ctx.fillStyle = COL.paper;
+  ctx.fillRect(0, 0, W, H);
+  // Subtle paper texture
+  ctx.save();
+  ctx.globalAlpha = 0.04;
+  for (let i = 0; i < 80; i++) {
+    ctx.fillStyle = COL.ink;
+    ctx.fillRect(Math.random() * W, Math.random() * H, 1, 1);
+  }
+  ctx.restore();
+}
+
+function drawText(text, x, y, opts = {}) {
+  const {
+    font = FONT_MONO,
+    size = 12,
+    weight = 400,
+    color = COL.ink,
+    align = 'left',
+    baseline = 'alphabetic',
+    italic = false,
+    letterSpacing = 0,
+    tracking = 0,
+  } = opts;
+  ctx.fillStyle = color;
+  ctx.textAlign = align;
+  ctx.textBaseline = baseline;
+  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${font}, serif`;
+  if (letterSpacing) {
+    // Manual letter spacing
+    const chars = text.split('');
+    const w = chars.map(c => ctx.measureText(c).width);
+    const total = w.reduce((a, b) => a + b, 0) + (chars.length - 1) * letterSpacing;
+    let cx = align === 'center' ? x - total / 2 : (align === 'right' ? x - total : x);
+    for (let i = 0; i < chars.length; i++) {
+      ctx.fillText(chars[i], cx, y);
+      cx += w[i] + letterSpacing;
+    }
+  } else {
+    ctx.fillText(text, x, y);
+  }
+}
+
+function drawLine(x1, y1, x2, y2, color = COL.ink, w = 1) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = w;
+  ctx.beginPath();
+  ctx.moveTo(x1, y1);
+  ctx.lineTo(x2, y2);
+  ctx.stroke();
+}
+
+function drawRect(x, y, w, h, opts = {}) {
+  const { fill, stroke, lw = 1 } = opts;
+  if (fill) { ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.strokeRect(x, y, w, h); }
+}
+
+function drawHeader() {
+  // Issue marker top left
+  drawText('Nº', 40, 50, { font: FONT_SERIF, size: 14, italic: true, color: COL.muted });
+  drawText('01', 40, 90, { font: FONT_SERIF, size: 56, weight: 800 });
+  drawText('VOL. I — ISSUE 01', 40, 112, { font: FONT_MONO, size: 9, weight: 500, color: COL.muted, letterSpacing: 1.5 });
+
+  // Center title
+  drawText('AGENT KITCHEN', W / 2, 80, {
+    font: FONT_SERIF, size: 64, weight: 900, align: 'center', italic: true,
+  });
+  drawText('— UN JUEGO SOBRE SER UN AGENTE DE IA —', W / 2, 108, {
+    font: FONT_MONO, size: 10, color: COL.muted, align: 'center', letterSpacing: 2.5,
+  });
+
+  // Right side: date/byline
+  const dateText = new Date().toLocaleDateString('es-ES', { year: 'numeric', month: 'long', day: 'numeric' }).toUpperCase();
+  drawText(dateText, W - 40, 50, { font: FONT_MONO, size: 9, color: COL.muted, align: 'right', letterSpacing: 1.5 });
+  drawText('PG. 01 / 01', W - 40, 70, { font: FONT_MONO, size: 9, color: COL.muted, align: 'right', letterSpacing: 1.5 });
+  drawText('CLAUDE & CO.', W - 40, 90, { font: FONT_SERIF, size: 14, italic: true, color: COL.ink, align: 'right' });
+
+  // Horizontal rules
+  drawLine(40, 130, W - 40, 130, COL.ink, 1.2);
+  drawLine(40, 134, W - 40, 134, COL.ink, 0.4);
+}
+
+function drawStatsBar() {
+  const y = 165;
+  // Three primary stats with editorial labels
+  const stats = [
+    {
+      x: 90,
+      label: 'TIEMPO',
+      value: formatTime(state.timeLeft),
+      sub: `/ ${formatTime(GAME_TIME)}`,
+      font: FONT_MONO, weight: 700, italic: false,
+    },
+    {
+      x: 320,
+      label: 'PUNTUACIÓN',
+      value: String(state.score).padStart(3, '0'),
+      sub: `BEST ${String(state.bestScore).padStart(3, '0')}`,
+      font: FONT_SERIF, weight: 900, italic: true,
+    },
+    {
+      x: 600,
+      label: 'CONTEXTO',
+      value: String(Math.floor(state.context)).padStart(3, '0') + '%',
+      sub: state.context >= CONTEXT_MAX ? 'BLOCKED · GO COMPACT' :
+           state.context >= 80 ? 'PROCESS · SLOW' :
+           state.context >= 60 ? 'WARNING' : 'STABLE',
+      font: FONT_MONO, weight: 700, italic: false,
+      isContext: true,
+    },
+    {
+      x: 900,
+      label: 'PR ENVIADAS',
+      value: String(state.shipped).padStart(2, '0'),
+      sub: `${state.perfectFeatures} W/ TDD`,
+      font: FONT_SERIF, weight: 900, italic: true,
+    },
+    {
+      x: 1140,
+      label: 'EXPIRADAS',
+      value: String(state.expired).padStart(2, '0'),
+      sub: 'USER ANGRY',
+      font: FONT_SERIF, weight: 900, italic: true,
+    },
+  ];
+
+  for (const stat of stats) {
+    drawText(stat.label, stat.x, y - 18, {
+      font: FONT_MONO, size: 9, color: COL.muted, letterSpacing: 1.8, weight: 500,
+    });
+    let valColor = COL.ink;
+    if (stat.isContext) {
+      if (state.context >= CONTEXT_MAX) valColor = COL.red;
+      else if (state.context >= 80) valColor = COL.warn;
+    }
+    drawText(stat.value, stat.x, y + 18, {
+      font: stat.font, size: 32, weight: stat.weight, italic: stat.italic, color: valColor,
+    });
+    drawText(stat.sub, stat.x, y + 34, {
+      font: FONT_MONO, size: 8, color: COL.muted, letterSpacing: 1.2,
+    });
+    if (stat.isContext) {
+      // Draw context bar
+      const bx = stat.x + 95, by = y + 5, bw = 130, bh = 12;
+      drawRect(bx, by, bw, bh, { stroke: COL.ink, lw: 1 });
+      const pct = state.context / CONTEXT_MAX;
+      let barColor = COL.ink;
+      if (state.context >= CONTEXT_MAX) barColor = COL.red;
+      else if (state.context >= 80) barColor = COL.warn;
+      drawRect(bx + 1.5, by + 1.5, (bw - 3) * pct, bh - 3, { fill: barColor });
+      // Marks
+      drawLine(bx + bw * 0.6, by, bx + bw * 0.6, by + bh, COL.ink, 0.5);
+      drawLine(bx + bw * 0.8, by, bx + bw * 0.8, by + bh, COL.ink, 0.5);
+    }
+  }
+
+  // Bottom rule
+  drawLine(40, 215, W - 40, 215, COL.ink, 1.2);
+}
+
+function drawPlayArea() {
+  // Background subtle grid
+  ctx.save();
+  ctx.strokeStyle = COL.lineL;
+  ctx.lineWidth = 0.5;
+  for (let x = 40; x <= W - 40; x += 40) {
+    ctx.beginPath();
+    ctx.moveTo(x, 230);
+    ctx.lineTo(x, 720);
+    ctx.stroke();
+  }
+  for (let y = 240; y <= 720; y += 40) {
+    ctx.beginPath();
+    ctx.moveTo(40, y);
+    ctx.lineTo(W - 40, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Section label
+  drawText('§ FLUJO DE TRABAJO', 50, 245, {
+    font: FONT_MONO, size: 9, color: COL.muted, letterSpacing: 2, weight: 500,
+  });
+  drawText('FIG. A', W - 50, 245, {
+    font: FONT_SERIF, size: 11, italic: true, color: COL.muted, align: 'right',
+  });
+}
+
+function drawInboxQueue() {
+  const inboxS = state.stations.find(s => s.id === 'INBOX');
+  const baseX = inboxS.x - inboxS.w/2 - 20;
+  const baseY = inboxS.y;
+  const visible = Math.min(state.inbox.length, 4);
+  const pulse = (Math.sin(state.elapsed * 6) + 1) / 2;
+
+  for (let i = visible - 1; i >= 0; i--) {
+    const t = state.inbox[i];
+    // Stack visually — more spread + more rotation when many tickets
+    const stackOffset = state.inbox.length >= 3 ? 12 : 8;
+    const cx = baseX - i * stackOffset;
+    const cy = baseY + i * 2;
+    const pct = Math.max(0, t.timeLeft / t.maxTime);
+    // Critical tickets pulse
+    if (pct < 0.25) {
+      ctx.save();
+      ctx.shadowColor = COL.red;
+      ctx.shadowBlur = 8 + pulse * 8;
+      drawMiniTicket(cx, cy, t, true);
+      ctx.restore();
+    } else {
+      drawMiniTicket(cx, cy, t, true);
+    }
+  }
+
+  if (state.inbox.length > 4) {
+    const overflowX = baseX - 4 * (state.inbox.length >= 3 ? 12 : 8) - 18;
+    drawText('+' + (state.inbox.length - 4), overflowX, baseY + 4, {
+      font: FONT_SERIF, size: 28, weight: 900, italic: true,
+      color: state.inbox.length >= 5 ? COL.red : COL.accent, align: 'right',
+    });
+  }
+
+  // Pressure label above the queue
+  if (state.inbox.length >= 3) {
+    const label = state.inbox.length >= 5 ? '!! ANGRY USERS !!' : 'USERS WAITING';
+    const labelColor = state.inbox.length >= 5 ? COL.red : COL.warn;
+    drawText(label, baseX - 50, baseY - 70, {
+      font: FONT_MONO, size: 10, weight: 700,
+      color: labelColor, align: 'center', letterSpacing: 2,
+    });
+    drawText(String(state.inbox.length).padStart(2, '0'), baseX - 50, baseY - 38, {
+      font: FONT_SERIF, size: 36, weight: 900, italic: true,
+      color: labelColor, align: 'center',
+    });
+  }
+}
+
+function computeLearningHint() {
+  if (!state.learningPhase) return null;
+  // Priority 1: a player is holding a ticket → guide based on what stages are missing
+  const holder = state.players.find(p => p.holding);
+  if (holder) {
+    const t = holder.holding;
+    if (!t.stages.has('planned')) {
+      return { text: 'Lleva el ticket a PLAN. Acércate y pulsa F (o /).', stationId: 'PLAN' };
+    }
+    if (t.type === 'FEATURE' && !t.stages.has('tested') && !t.stages.has('coded')) {
+      return { text: 'FEATURE: pasa por TDD para 2× puntos. O salta a CODE.', stationId: 'TDD' };
+    }
+    if (!t.stages.has('coded')) {
+      return { text: 'Ahora CODE. Implementa el ticket.', stationId: 'CODE' };
+    }
+    return { text: 'Listo. Llévalo a SHIP PR para enviarlo.', stationId: 'PR' };
+  }
+  // Priority 2: a station has a ready ticket waiting for pickup
+  const ready = state.stations.find(s => s.kind === 'process' && s.queue.length > 0 && s.queue[0].progress >= 1);
+  if (ready) {
+    return { text: `Recoge el ticket en ${ready.label} (verde = listo).`, stationId: ready.id };
+  }
+  // Priority 3: a station is processing
+  const busy = state.stations.find(s => s.kind === 'process' && s.queue.length > 0 && s.queue[0].progress < 1);
+  if (busy) {
+    return { text: `Espera a que ${busy.label} termine. Mientras puedes coger otro ticket.`, stationId: busy.id };
+  }
+  // Priority 4: ticket in inbox
+  if (state.inbox.length > 0) {
+    return { text: 'Recoge el ticket en INBOX. Pulsa F (jugador C-1) o / (C-2).', stationId: 'INBOX' };
+  }
+  // Priority 5: context warning
+  if (state.context >= 70) {
+    return { text: 'Tu CONTEXTO está alto. Ve a COMPACT y quédate quieto para vaciarlo.', stationId: 'COMPACT' };
+  }
+  return { text: 'Esperando próximo ticket…', stationId: null };
+}
+
+function drawLearningOverlay(hint) {
+  if (!state.learningPhase || !hint) return;
+  // Editor's note box, positioned in the empty corner top-right of the play area
+  const x = W - 380, y = 235, w = 340, h = 60;
+  // Background
+  ctx.fillStyle = COL.paper3;
+  ctx.fillRect(x, y, w, h);
+  ctx.strokeStyle = COL.ink;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(x, y, w, h);
+  // Inner rule
+  ctx.strokeStyle = COL.line;
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
+  // Header
+  drawText('NOTA DEL EDITOR — ' + String(Math.min(state.shipped + 1, 5)).padStart(2, '0') + ' / 05', x + 12, y + 18, {
+    font: FONT_MONO, size: 8, color: COL.accent, letterSpacing: 1.8, weight: 700,
+  });
+  // Hint text — wrap if needed
+  ctx.font = `italic 600 14px ${FONT_SERIF}, serif`;
+  const maxW = w - 24;
+  const words = hint.text.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const word of words) {
+    const test = cur ? cur + ' ' + word : word;
+    if (ctx.measureText(test).width > maxW && cur) {
+      lines.push(cur);
+      cur = word;
+    } else cur = test;
+  }
+  if (cur) lines.push(cur);
+  for (let i = 0; i < lines.length; i++) {
+    drawText(lines[i], x + 12, y + 36 + i * 16, {
+      font: FONT_SERIF, size: 13, italic: true, weight: 600, color: COL.ink,
+    });
+  }
+}
+
+function drawMiniTicket(cx, cy, ticket, rotated) {
+  // Small ticket card preview, rotated slightly
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (rotated) ctx.rotate(-0.08);
+  const w = 70, h = 80;
+  ctx.fillStyle = COL.cardBg;
+  ctx.fillRect(-w/2, -h/2, w, h);
+  ctx.strokeStyle = COL.ink;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-w/2, -h/2, w, h);
+  // Type label
+  drawText(ticket.type, 0, -h/2 + 14, {
+    font: FONT_MONO, size: 8, weight: 700, align: 'center', letterSpacing: 1,
+    color: ticket.type === 'BUG' ? COL.red : COL.accent,
+  });
+  drawLine(-w/2 + 6, -h/2 + 20, w/2 - 6, -h/2 + 20, COL.ink, 0.5);
+  // Time bar
+  const pct = Math.max(0, ticket.timeLeft / ticket.maxTime);
+  drawRect(-w/2 + 6, h/2 - 10, w - 12, 3, { fill: COL.line });
+  drawRect(-w/2 + 6, h/2 - 10, (w - 12) * pct, 3, {
+    fill: pct < 0.25 ? COL.red : pct < 0.5 ? COL.warn : COL.ok,
+  });
+  // ID
+  drawText('#' + String(ticket.id).padStart(3, '0'), 0, h/2 - 18, {
+    font: FONT_MONO, size: 7, color: COL.muted, align: 'center',
+  });
+  ctx.restore();
+}
+
+function drawTicketCard(cx, cy, ticket, big = false) {
+  ctx.save();
+  ctx.translate(cx, cy);
+  const hasHint = !!ticket.hint && big;
+  const w = big ? 130 : 110;
+  const h = big ? (hasHint ? 116 : 100) : 88;
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.08)';
+  ctx.fillRect(-w/2 + 2, -h/2 + 3, w, h);
+  // Card
+  ctx.fillStyle = COL.cardBg;
+  ctx.fillRect(-w/2, -h/2, w, h);
+  ctx.strokeStyle = COL.ink;
+  ctx.lineWidth = 1;
+  ctx.strokeRect(-w/2, -h/2, w, h);
+  // Type
+  drawText(ticket.type, -w/2 + 8, -h/2 + 14, {
+    font: FONT_MONO, size: 9, weight: 700, letterSpacing: 1.2,
+    color: ticket.type === 'BUG' ? COL.red : COL.accent,
+  });
+  // ID
+  drawText('#' + String(ticket.id).padStart(3, '0'), w/2 - 8, -h/2 + 14, {
+    font: FONT_MONO, size: 8, color: COL.muted, align: 'right',
+  });
+  drawLine(-w/2 + 6, -h/2 + 19, w/2 - 6, -h/2 + 19, COL.ink, 0.5);
+  // Description (wrap)
+  wrapText(ticket.desc, 0, -h/2 + 36, w - 14, 12, {
+    font: FONT_SERIF, size: 11, italic: true, align: 'center',
+  });
+  // Tutorial hint inset (only on big cards)
+  if (hasHint) {
+    const hintY = h/2 - 36;
+    // Background highlight
+    ctx.fillStyle = 'rgba(194, 65, 12, 0.08)';
+    ctx.fillRect(-w/2 + 4, hintY - 8, w - 8, 14);
+    drawLine(-w/2 + 6, hintY - 8, w/2 - 6, hintY - 8, COL.accent, 0.5);
+    drawText(ticket.hint, 0, hintY + 2, {
+      font: FONT_MONO, size: 7, weight: 700, color: COL.accent,
+      align: 'center', letterSpacing: 0.7,
+    });
+  }
+  // Stages stamps
+  const stages = ['planned', 'tested', 'coded'];
+  const stampLabels = { planned: 'PLN', tested: 'TST', coded: 'COD' };
+  for (let i = 0; i < stages.length; i++) {
+    const st = stages[i];
+    const has = ticket.stages.has(st);
+    const sx = -w/2 + 8 + i * 24;
+    const sy = h/2 - 24;
+    if (has) {
+      ctx.fillStyle = COL.ok;
+      ctx.fillRect(sx, sy, 20, 12);
+      drawText(stampLabels[st], sx + 10, sy + 9, {
+        font: FONT_MONO, size: 7, weight: 700, color: COL.paper, align: 'center', letterSpacing: 0.5,
+      });
+    } else {
+      ctx.strokeStyle = COL.line;
+      ctx.lineWidth = 0.5;
+      ctx.strokeRect(sx, sy, 20, 12);
+      drawText(stampLabels[st], sx + 10, sy + 9, {
+        font: FONT_MONO, size: 7, color: COL.line, align: 'center', letterSpacing: 0.5,
+      });
+    }
+  }
+  // Time bar
+  const pct = Math.max(0, ticket.timeLeft / ticket.maxTime);
+  drawRect(-w/2 + 6, h/2 - 8, w - 12, 3, { fill: COL.line });
+  drawRect(-w/2 + 6, h/2 - 8, (w - 12) * pct, 3, {
+    fill: pct < 0.25 ? COL.red : pct < 0.5 ? COL.warn : COL.ok,
+  });
+  ctx.restore();
+}
+
+function wrapText(text, x, y, maxW, lh, opts) {
+  ctx.font = `${opts.italic ? 'italic ' : ''}${opts.weight || 400} ${opts.size}px ${opts.font || FONT_SERIF}, serif`;
+  const words = text.split(' ');
+  const lines = [];
+  let cur = '';
+  for (const w of words) {
+    const test = cur ? cur + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && cur) {
+      lines.push(cur);
+      cur = w;
+    } else cur = test;
+  }
+  if (cur) lines.push(cur);
+  for (let i = 0; i < lines.length; i++) {
+    drawText(lines[i], x, y + i * lh, opts);
+  }
+}
+
+function drawStation(s, spotlighted) {
+  const left = s.x - s.w/2, top = s.y - s.h/2;
+  const isNear = anyPlayerNearStation(s);
+  const isPR = s.kind === 'ship';
+  const isInbox = s.kind === 'inbox';
+
+  // Spotlight from learning hint — pulsing accent glow behind station
+  if (spotlighted) {
+    const pulse = (Math.sin(state.elapsed * 4) + 1) / 2;
+    ctx.save();
+    ctx.fillStyle = `rgba(194, 65, 12, ${0.10 + pulse * 0.18})`;
+    ctx.fillRect(left - 8, top - 8, s.w + 16, s.h + 16);
+    ctx.restore();
+  }
+
+  // INBOX pressure level (0 = calm, 1 = warning, 2 = critical)
+  let pressure = 0;
+  if (isInbox) {
+    if (state.inbox.length >= 5) pressure = 2;
+    else if (state.inbox.length >= 3) pressure = 1;
+  }
+
+  // Background — flash on inbox pressure
+  let bg = isPR ? COL.paper3 : COL.paper2;
+  if (pressure > 0) {
+    const pulse = (Math.sin(state.elapsed * (pressure === 2 ? 8 : 5)) + 1) / 2;
+    bg = pressure === 2
+      ? `rgba(139, 44, 32, ${0.10 + pulse * 0.20})`
+      : `rgba(168, 132, 16, ${0.08 + pulse * 0.14})`;
+    ctx.fillStyle = COL.paper2;
+    ctx.fillRect(left, top, s.w, s.h);
+    ctx.fillStyle = bg;
+    ctx.fillRect(left, top, s.w, s.h);
+  } else {
+    ctx.fillStyle = bg;
+    ctx.fillRect(left, top, s.w, s.h);
+  }
+
+  // Border
+  let borderColor = isNear ? COL.accent : COL.ink;
+  let borderWidth = isNear ? 2.5 : 1.2;
+  if (pressure === 2) {
+    const pulse = (Math.sin(state.elapsed * 8) + 1) / 2;
+    borderColor = COL.red;
+    borderWidth = 2 + pulse * 1.5;
+  } else if (pressure === 1) {
+    borderColor = isNear ? COL.accent : COL.warn;
+    borderWidth = 1.8;
+  }
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = borderWidth;
+  ctx.strokeRect(left, top, s.w, s.h);
+
+  // Inner thin border (editorial double-rule)
+  ctx.strokeStyle = isNear ? COL.accentL : COL.line;
+  ctx.lineWidth = 0.5;
+  ctx.strokeRect(left + 4, top + 4, s.w - 8, s.h - 8);
+
+  // Number top-left
+  drawText(s.num, left + 10, top + 22, {
+    font: FONT_MONO, size: 10, weight: 700, color: COL.muted, letterSpacing: 1.5,
+  });
+  // Label center
+  let labelColor = isPR ? COL.accent : COL.ink;
+  if (pressure === 2) labelColor = COL.red;
+  drawText(s.label, s.x, top + 50, {
+    font: FONT_SERIF, size: isPR ? 22 : 22, weight: 900, italic: true,
+    color: labelColor, align: 'center',
+  });
+
+  // Sub-info
+  let sub = '';
+  let subColor = COL.muted;
+  if (s.kind === 'process') {
+    sub = `${s.time.toFixed(1)}s · +${s.contextCost} · CAP ${s.capacity}`;
+    if (s.featureOnly) sub = `${s.time.toFixed(1)}s · +${s.contextCost} · FEAT ONLY`;
+  } else if (s.kind === 'inbox') {
+    if (pressure === 2) { sub = `${state.inbox.length} USERS ANGRY`; subColor = COL.red; }
+    else if (pressure === 1) { sub = `${state.inbox.length} USERS WAITING`; subColor = COL.warn; }
+    else sub = `${state.inbox.length} EN COLA`;
+  } else if (s.kind === 'ship') {
+    sub = 'NEEDS · CODED';
+  } else if (s.kind === 'compact') {
+    sub = 'STAND HERE · -' + COMPACT_RATE + '/SEC';
+  } else if (s.kind === 'subagent_box') {
+    sub = `+${SUBAGENT_DEPLOY_CTX} CTX · 2× SLOW`;
+  }
+  drawText(sub, s.x, top + s.h - 14, {
+    font: FONT_MONO, size: 8, color: subColor, align: 'center', letterSpacing: 1.2, weight: pressure > 0 ? 700 : 400,
+  });
+
+  // Show held tickets on station
+  if (s.kind === 'process' && s.queue.length > 0) {
+    const front = s.queue[0];
+    // Waiting tickets stacked to the LEFT of the front, rotated like papers on a desk
+    for (let i = s.queue.length - 1; i >= 1; i--) {
+      const entry = s.queue[i];
+      const offset = i; // 1, 2, ...
+      ctx.save();
+      ctx.translate(s.x - 18 * offset, top - 44 + 4 * offset);
+      ctx.rotate(-0.12 * offset);
+      // Draw a compact card (without the hint inset, even if ticket has one)
+      const w = 90, h = 70;
+      ctx.fillStyle = 'rgba(0,0,0,0.06)';
+      ctx.fillRect(-w/2 + 2, -h/2 + 3, w, h);
+      ctx.fillStyle = COL.cardBg;
+      ctx.fillRect(-w/2, -h/2, w, h);
+      ctx.strokeStyle = COL.ink;
+      ctx.lineWidth = 0.8;
+      ctx.strokeRect(-w/2, -h/2, w, h);
+      drawText(entry.ticket.type, -w/2 + 6, -h/2 + 12, {
+        font: FONT_MONO, size: 8, weight: 700, letterSpacing: 1,
+        color: entry.ticket.type === 'BUG' ? COL.red : COL.accent,
+      });
+      drawText('#' + String(entry.ticket.id).padStart(3, '0'), w/2 - 6, -h/2 + 12, {
+        font: FONT_MONO, size: 7, color: COL.muted, align: 'right',
+      });
+      drawLine(-w/2 + 4, -h/2 + 16, w/2 - 4, -h/2 + 16, COL.ink, 0.4);
+      wrapText(entry.ticket.desc, 0, -h/2 + 30, w - 10, 10, {
+        font: FONT_SERIF, size: 9, italic: true, align: 'center',
+      });
+      // Small "WAITING" stamp
+      drawText('WAITING', 0, h/2 - 18, {
+        font: FONT_MONO, size: 6, weight: 700, color: COL.warn, align: 'center', letterSpacing: 1,
+      });
+      // Time bar
+      const pct = Math.max(0, entry.ticket.timeLeft / entry.ticket.maxTime);
+      drawRect(-w/2 + 4, h/2 - 6, w - 8, 2, { fill: COL.line });
+      drawRect(-w/2 + 4, h/2 - 6, (w - 8) * pct, 2, {
+        fill: pct < 0.25 ? COL.red : pct < 0.5 ? COL.warn : COL.ok,
+      });
+      ctx.restore();
+    }
+    // Front (active) ticket on top, large
+    drawTicketCard(s.x, top - 50, front.ticket);
+    // Progress bar / ready stamp
+    if (front.progress < 1) {
+      const bx = left + 10, by = top + s.h - 28, bw = s.w - 20, bh = 4;
+      drawRect(bx, by, bw, bh, { stroke: COL.ink, lw: 0.5 });
+      drawRect(bx, by, bw * front.progress, bh, { fill: COL.accent });
+    } else {
+      ctx.save();
+      ctx.fillStyle = COL.ok;
+      ctx.fillRect(left + 10, top + s.h - 28, s.w - 20, 4);
+      ctx.restore();
+      drawText('READY · PICK UP', s.x, top + s.h - 32, {
+        font: FONT_MONO, size: 8, weight: 700, color: COL.ok, align: 'center', letterSpacing: 1.5,
+      });
+    }
+    // Queue counter in top-right corner of the station
+    const qFull = s.queue.length >= s.capacity;
+    drawText(`${s.queue.length}/${s.capacity}`, left + s.w - 10, top + 22, {
+      font: FONT_MONO, size: 10, weight: 700,
+      color: qFull ? COL.red : (s.queue.length >= 2 ? COL.warn : COL.muted),
+      align: 'right', letterSpacing: 1,
+    });
+  } else if (s.kind === 'ship' && s.holds) {
+    drawTicketCard(s.x, top - 50, s.holds);
+  }
+
+  // Compact station shows pulse if context high
+  if (s.kind === 'compact') {
+    if (state.context >= 80) {
+      const pulse = (Math.sin(state.elapsed * 6) + 1) / 2;
+      ctx.strokeStyle = state.context >= CONTEXT_MAX ? COL.red : COL.warn;
+      ctx.lineWidth = 2 + pulse * 2;
+      ctx.strokeRect(left - 4, top - 4, s.w + 8, s.h + 8);
+    }
+  }
+
+  // Subagent box: render status / mini ticket icon when busy
+  if (s.kind === 'subagent_box') {
+    const sa = state.subagents[s.subagentIdx];
+    if (sa && sa.state !== 'idle') {
+      // Dashed border to indicate "in use"
+      ctx.save();
+      ctx.setLineDash([4, 3]);
+      ctx.strokeStyle = COL.accent;
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(left + 2, top + 2, s.w - 4, s.h - 4);
+      ctx.restore();
+    }
+    // Status line
+    let statusText = 'IDLE · DROP TICKET';
+    let statusColor = COL.muted;
+    if (sa) {
+      if (sa.state === 'toStation' && sa.target) { statusText = '→ ' + sa.target.label; statusColor = COL.ink; }
+      else if (sa.state === 'waiting') { statusText = 'WAITING · QUEUE FULL'; statusColor = COL.warn; }
+      else if (sa.state === 'working') { statusText = 'PROCESSING…'; statusColor = COL.ink; }
+      else if (sa.state === 'toShip') { statusText = '→ SHIP PR'; statusColor = COL.accent; }
+      else if (sa.state === 'returning') { statusText = 'RETURNING'; statusColor = COL.muted; }
+    }
+    drawText(statusText, s.x, top + s.h - 28, {
+      font: FONT_MONO, size: 8, color: statusColor, align: 'center', letterSpacing: 1.2, weight: 700,
+    });
+  }
+}
+
+function drawPlayer(p) {
+  // Trail
+  for (const t of p.trail) {
+    ctx.fillStyle = `rgba(26, 22, 17, ${t.a * 0.12})`;
+    ctx.beginPath();
+    ctx.arc(t.x, t.y, p.r * 0.6 * t.a, 0, TAU);
+    ctx.fill();
+  }
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.15)';
+  ctx.beginPath();
+  ctx.ellipse(p.x, p.y + p.r + 2, p.r * 0.9, p.r * 0.3, 0, 0, TAU);
+  ctx.fill();
+  // Feet — top-down view: positioned perpendicular to facing direction,
+  // stepping forward/back along the movement axis (sliding underneath)
+  const dx = p.faceX;
+  const dy = p.faceY;
+  const perpX = -dy;
+  const perpY = dx;
+  const sideOffset = 12;   // perpendicular spread from spine
+  const stepAmp = 8;       // stride length along facing direction
+  const step1 = p.isMoving ? Math.sin(p.stepPhase) * stepAmp : 0;
+  const step2 = p.isMoving ? Math.sin(p.stepPhase + Math.PI) * stepAmp : 0;
+  ctx.fillStyle = p.cfg.badge;
+  ctx.beginPath();
+  ctx.arc(
+    p.x + perpX * sideOffset + dx * step1,
+    p.y + perpY * sideOffset + dy * step1,
+    6.5, 0, TAU
+  );
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(
+    p.x - perpX * sideOffset + dx * step2,
+    p.y - perpY * sideOffset + dy * step2,
+    6.5, 0, TAU
+  );
+  ctx.fill();
+  // Badge background (dark disc)
+  ctx.fillStyle = p.cfg.badge;
+  ctx.beginPath();
+  ctx.arc(p.x, p.y, p.r, 0, TAU);
+  ctx.fill();
+  // Claude logo (SVG path), colored per player
+  ctx.save();
+  ctx.translate(p.x, p.y);
+  const logoScale = (p.r * 2) / 24 * 0.85;
+  ctx.scale(logoScale, logoScale);
+  ctx.translate(-12, -12);
+  ctx.fillStyle = p.cfg.color;
+  ctx.fill(CLAUDE_PATH);
+  ctx.restore();
+  // Highlight ring (when interaction available)
+  const nearS = nearestStation(p);
+  if (nearS) {
+    ctx.strokeStyle = p.cfg.color;
+    ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.r + 5, 0, TAU);
+    ctx.stroke();
+  }
+  // Player ID tag (above the badge)
+  drawText(p.cfg.label, p.x, p.y - p.r - 6, {
+    font: FONT_MONO, size: 9, weight: 700,
+    color: p.cfg.color, align: 'center', letterSpacing: 1.5,
+  });
+
+  // Carried ticket
+  if (p.holding) {
+    // Offset card to avoid overlapping the other player
+    const offsetX = p === state.players[0] ? 40 : -40;
+    drawTicketCard(p.x + offsetX, p.y - 50, p.holding);
+    drawLine(
+      p.x + (offsetX > 0 ? 5 : -5), p.y - 8,
+      p.x + (offsetX > 0 ? 30 : -30), p.y - 30,
+      COL.muted, 0.5
+    );
+  }
+}
+
+function drawAllPlayers() {
+  for (const p of state.players) drawPlayer(p);
+}
+
+function drawSubagent(sa) {
+  if (sa.state === 'idle') return; // hidden when idle inside box
+  const alpha = 0.55;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  // Shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.12)';
+  ctx.beginPath();
+  ctx.ellipse(sa.x, sa.y + PLAYER_R + 2, PLAYER_R * 0.8, PLAYER_R * 0.25, 0, 0, TAU);
+  ctx.fill();
+  // Feet (smaller, same animation style)
+  const dx = sa.faceX, dy = sa.faceY;
+  const perpX = -dy, perpY = dx;
+  const sideOffset = 11;
+  const stepAmp = 6;
+  const s1 = sa.isMoving ? Math.sin(sa.stepPhase) * stepAmp : 0;
+  const s2 = sa.isMoving ? Math.sin(sa.stepPhase + Math.PI) * stepAmp : 0;
+  ctx.fillStyle = COL.ink;
+  ctx.beginPath();
+  ctx.arc(sa.x + perpX * sideOffset + dx * s1, sa.y + perpY * sideOffset + dy * s1, 5, 0, TAU);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(sa.x - perpX * sideOffset + dx * s2, sa.y - perpY * sideOffset + dy * s2, 5, 0, TAU);
+  ctx.fill();
+  // Body (smaller than player)
+  const r = PLAYER_R - 2;
+  ctx.fillStyle = COL.ink;
+  ctx.beginPath();
+  ctx.arc(sa.x, sa.y, r, 0, TAU);
+  ctx.fill();
+  // Claude logo, color of player C-1 but desaturated
+  ctx.save();
+  ctx.translate(sa.x, sa.y);
+  const logoScale = (r * 2) / 24 * 0.85;
+  ctx.scale(logoScale, logoScale);
+  ctx.translate(-12, -12);
+  ctx.fillStyle = COL.accent;
+  ctx.fill(CLAUDE_PATH);
+  ctx.restore();
+  // α badge above
+  drawText('α' + (sa.idx + 1), sa.x, sa.y - r - 6, {
+    font: FONT_MONO, size: 9, weight: 700, color: COL.accent, align: 'center', letterSpacing: 1.5,
+  });
+  // Carried ticket
+  if (sa.ticket) {
+    drawTicketCard(sa.x + 40, sa.y - 50, sa.ticket);
+    drawLine(sa.x + 5, sa.y - 8, sa.x + 30, sa.y - 30, COL.muted, 0.5);
+  }
+  ctx.restore();
+}
+
+function drawAllSubagents() {
+  for (const sa of state.subagents) drawSubagent(sa);
+}
+
+function drawFlashes() {
+  for (const f of state.flashes) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, f.life));
+    drawText(f.text, f.x, f.y, {
+      font: FONT_MONO, size: 11, weight: 700, color: f.color, align: 'center', letterSpacing: 1.5,
+    });
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawFooter() {
+  drawLine(40, 740, W - 40, 740, COL.ink, 1.2);
+
+  if (state.players.length === 1) {
+    const p = state.players[0];
+    drawText('LLEVANDO', 50, 762, {
+      font: FONT_MONO, size: 9, color: COL.muted, letterSpacing: 1.8, weight: 500,
+    });
+    const t = p.holding;
+    let carryText = '— vacío —';
+    let carryColor = COL.muted;
+    if (t) {
+      const flags = [];
+      if (t.stages.has('planned')) flags.push('planned');
+      if (t.stages.has('tested')) flags.push('tested');
+      if (t.stages.has('coded')) flags.push('coded');
+      carryText = `${t.type} #${String(t.id).padStart(3,'0')} · ${t.desc}${flags.length ? ' · ' + flags.join(', ') : ''}`;
+      carryColor = COL.ink;
+    }
+    drawText(carryText, 50, 780, {
+      font: FONT_SERIF, size: 15, italic: true, color: carryColor,
+    });
+    drawText('WASD  MOVER     F  INTERACTUAR     Q  DESCARTAR', W - 50, 780, {
+      font: FONT_MONO, size: 10, color: COL.muted, align: 'right', letterSpacing: 1.4,
+    });
+  } else {
+    // Two-player footer: split into two columns
+    for (let i = 0; i < 2; i++) {
+      const p = state.players[i];
+      const baseX = i === 0 ? 50 : W / 2 + 20;
+      drawText(p.cfg.label, baseX, 762, {
+        font: FONT_MONO, size: 10, weight: 700,
+        color: p.cfg.color, letterSpacing: 1.8,
+      });
+      const t = p.holding;
+      let carryText = '— vacío —';
+      let carryColor = COL.muted;
+      if (t) {
+        const flags = [];
+        if (t.stages.has('planned')) flags.push('P');
+        if (t.stages.has('tested')) flags.push('T');
+        if (t.stages.has('coded')) flags.push('C');
+        carryText = `${t.type} #${String(t.id).padStart(3,'0')} · ${t.desc}${flags.length ? ' [' + flags.join('') + ']' : ''}`;
+        carryColor = COL.ink;
+      }
+      drawText(carryText, baseX, 782, {
+        font: FONT_SERIF, size: 13, italic: true, color: carryColor,
+      });
+    }
+    // Center divider
+    drawLine(W / 2, 750, W / 2, 795, COL.line, 0.5);
+  }
+}
+
+function drawMenu() {
+  clear();
+  ctx.save();
+  drawLine(80, 90, W - 80, 90, COL.ink, 1.2);
+  drawLine(80, 94, W - 80, 94, COL.ink, 0.4);
+
+  drawText('VOL. I — ISSUE 03', 100, 80, {
+    font: FONT_MONO, size: 10, weight: 500, color: COL.muted, letterSpacing: 2.5,
+  });
+  drawText('UN JUEGO DE PABLO AUSEJO × CLAUDE', W - 100, 80, {
+    font: FONT_MONO, size: 10, weight: 500, color: COL.muted, letterSpacing: 2, align: 'right',
+  });
+
+  // Massive title
+  drawText('AGENT', W / 2, 230, {
+    font: FONT_SERIF, size: 160, weight: 900, italic: true, align: 'center', color: COL.ink,
+  });
+  drawText('KITCHEN', W / 2, 350, {
+    font: FONT_SERIF, size: 160, weight: 900, align: 'center', color: COL.accent,
+  });
+
+  drawText('— OVERCOOKED · BUT YOU ARE CLAUDE CODE —', W / 2, 385, {
+    font: FONT_MONO, size: 11, color: COL.muted, align: 'center', letterSpacing: 3,
+  });
+  drawText('La primera partida arranca despacio · te enseña jugando.', W / 2, 405, {
+    font: FONT_SERIF, size: 13, italic: true, color: COL.muted, align: 'center',
+  });
+
+  drawLine(150, 425, W - 150, 425, COL.ink, 0.5);
+
+  // Mode selector
+  drawText('§ MODO', W / 2, 455, {
+    font: FONT_MONO, size: 10, color: COL.muted, letterSpacing: 2, weight: 700, align: 'center',
+  });
+  const modes = [
+    { n: 1, label: '1 JUGADOR', x: W / 2 - 160 },
+    { n: 2, label: '2 JUGADORES', x: W / 2 + 160 },
+  ];
+  for (const m of modes) {
+    const selected = state.menuPlayers === m.n;
+    const y = 500;
+    if (selected) {
+      ctx.fillStyle = COL.ink;
+      ctx.fillRect(m.x - 130, y - 30, 260, 50);
+      drawText('[ ' + m.label + ' ]', m.x, y + 5, {
+        font: FONT_SERIF, size: 22, weight: 900, italic: true,
+        color: COL.paper, align: 'center', letterSpacing: 1,
+      });
+      drawText('PULSA ' + m.n, m.x, y + 32, {
+        font: FONT_MONO, size: 9, color: COL.accent, align: 'center', letterSpacing: 2,
+      });
+    } else {
+      ctx.strokeStyle = COL.line;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(m.x - 130, y - 30, 260, 50);
+      drawText(m.label, m.x, y + 5, {
+        font: FONT_SERIF, size: 22, weight: 400, italic: true,
+        color: COL.muted, align: 'center', letterSpacing: 1,
+      });
+      drawText('PULSA ' + m.n, m.x, y + 32, {
+        font: FONT_MONO, size: 9, color: COL.muted, align: 'center', letterSpacing: 2,
+      });
+    }
+  }
+
+  drawLine(150, 565, W - 150, 565, COL.ink, 0.5);
+
+  // Controls — two columns
+  drawText('§ CONTROLES — C-1', 150, 600, {
+    font: FONT_MONO, size: 10, color: PLAYER_CONFIGS[0].color, letterSpacing: 2, weight: 700,
+  });
+  const c1 = [
+    ['WASD',  'mover'],
+    ['F',     'interactuar / coger / dejar'],
+    ['Q',     'descartar ticket (-8 pts)'],
+  ];
+  for (let i = 0; i < c1.length; i++) {
+    drawText(c1[i][0], 150, 630 + i * 22, {
+      font: FONT_MONO, size: 13, weight: 700, color: COL.ink, letterSpacing: 1,
+    });
+    drawText(c1[i][1], 250, 630 + i * 22, {
+      font: FONT_SERIF, size: 14, italic: true, color: COL.muted,
+    });
+  }
+
+  if (state.menuPlayers === 2) {
+    drawText('§ CONTROLES — C-2', 670, 600, {
+      font: FONT_MONO, size: 10, color: PLAYER_CONFIGS[1].color, letterSpacing: 2, weight: 700,
+    });
+    const c2 = [
+      ['↑↓←→',  'mover'],
+      ['/',     'interactuar / coger / dejar'],
+      ['.',     'descartar ticket (-8 pts)'],
+    ];
+    for (let i = 0; i < c2.length; i++) {
+      drawText(c2[i][0], 670, 630 + i * 22, {
+        font: FONT_MONO, size: 13, weight: 700, color: COL.ink, letterSpacing: 1,
+      });
+      drawText(c2[i][1], 760, 630 + i * 22, {
+        font: FONT_SERIF, size: 14, italic: true, color: COL.muted,
+      });
+    }
+  } else {
+    drawText('§ PUNTOS', 670, 600, {
+      font: FONT_MONO, size: 10, color: COL.muted, letterSpacing: 2, weight: 700,
+    });
+    drawText('BUG · 10', 670, 632, { font: FONT_SERIF, size: 14, italic: true });
+    drawText('FEATURE · 12', 670, 654, { font: FONT_SERIF, size: 14, italic: true });
+    drawText('FEATURE + TDD · 25', 670, 676, { font: FONT_SERIF, size: 14, italic: true, color: COL.accent });
+  }
+
+  // CTA
+  const pulse = (Math.sin(state.elapsed * 3) + 1) / 2;
+  ctx.globalAlpha = 0.5 + pulse * 0.5;
+  drawText('▸  PULSA  SPACE  PARA  EMPEZAR  ◂', W / 2, 745, {
+    font: FONT_MONO, size: 14, weight: 700, color: COL.accent, align: 'center', letterSpacing: 3,
+  });
+  ctx.globalAlpha = 1;
+
+  drawLine(80, 770, W - 80, 770, COL.ink, 0.5);
+  // Show studio status if any skills purchased
+  const sk = state.skills;
+  const anySkills = (sk.SPEED + sk.MODEL + sk.SUBAGENT) > 0 || (sk.hours || 0) > 0;
+  if (anySkills) {
+    const parts = [];
+    if (sk.SPEED > 0)    parts.push(`SPD ${sk.SPEED}/${SKILL_DEFS.SPEED.maxLevel}`);
+    if (sk.MODEL > 0)    parts.push(`MDL ${sk.MODEL}/${SKILL_DEFS.MODEL.maxLevel}`);
+    if (sk.SUBAGENT > 0) parts.push(`SUB ${sk.SUBAGENT}/${SKILL_DEFS.SUBAGENT.maxLevel}`);
+    if (sk.CONTEXT > 0)  parts.push(`CTX ${sk.CONTEXT}/${SKILL_DEFS.CONTEXT.maxLevel}`);
+    parts.push(`${sk.hours || 0}h`);
+    drawText('STUDIO · ' + parts.join('  ·  '), W / 2, 786, {
+      font: FONT_MONO, size: 10, color: COL.accent, align: 'center', letterSpacing: 2, weight: 700,
+    });
+  } else {
+    drawText('© CLAUDE & CO.', 100, 788, {
+      font: FONT_MONO, size: 9, color: COL.muted, letterSpacing: 1.5,
+    });
+    drawText('AUTO-AGENT PRESS', W - 100, 788, {
+      font: FONT_MONO, size: 9, color: COL.muted, letterSpacing: 1.5, align: 'right',
+    });
+  }
+
+  ctx.restore();
+  state.elapsed += 1/60;
+}
+
+function drawShop() {
+  clear();
+  const skills = state.skills;
+
+  // Header
+  drawLine(80, 90, W - 80, 90, COL.ink, 1.2);
+  drawLine(80, 94, W - 80, 94, COL.ink, 0.4);
+  drawText('VOL. I — STUDIO UPGRADES', 100, 80, {
+    font: FONT_MONO, size: 10, weight: 500, color: COL.muted, letterSpacing: 2.5,
+  });
+  drawText('META · PROGRESSION', W - 100, 80, {
+    font: FONT_MONO, size: 10, weight: 500, color: COL.muted, letterSpacing: 2, align: 'right',
+  });
+
+  // Title
+  drawText('STUDIO', W / 2, 175, {
+    font: FONT_SERIF, size: 100, weight: 900, italic: true, align: 'center', color: COL.ink,
+  });
+  drawText('— invierte tus horas en habilidades —', W / 2, 205, {
+    font: FONT_MONO, size: 10, color: COL.muted, align: 'center', letterSpacing: 2.5,
+  });
+
+  // Hours available
+  const hours = skills.hours || 0;
+  ctx.fillStyle = COL.ink;
+  ctx.fillRect(W / 2 - 200, 230, 400, 70);
+  drawText('HORAS DISPONIBLES', W / 2, 252, {
+    font: FONT_MONO, size: 10, color: COL.paper2, align: 'center', letterSpacing: 2.5, weight: 500,
+  });
+  drawText(String(hours).padStart(4, '0') + 'h', W / 2, 290, {
+    font: FONT_SERIF, size: 36, weight: 900, italic: true, color: COL.paper, align: 'center',
+  });
+
+  // Four skill cards in a 2×2 grid
+  const skillKeys = ['SPEED', 'MODEL', 'SUBAGENT', 'CONTEXT'];
+  const cardW = 480, cardH = 200, gapX = 32, gapY = 22;
+  const totalW = cardW * 2 + gapX;
+  const startX = (W - totalW) / 2;
+  const startY = 335;
+
+  for (let i = 0; i < skillKeys.length; i++) {
+    const key = skillKeys[i];
+    const def = SKILL_DEFS[key];
+    const level = skills[key];
+    const maxed = level >= def.maxLevel;
+    const nextCost = maxed ? null : def.costs[level];
+    const canAfford = !maxed && hours >= nextCost;
+    const col = i % 2;
+    const row = Math.floor(i / 2);
+    const x = startX + col * (cardW + gapX);
+    const cardY = startY + row * (cardH + gapY);
+
+    // Card background
+    ctx.fillStyle = COL.paper2;
+    ctx.fillRect(x, cardY, cardW, cardH);
+    ctx.strokeStyle = COL.ink;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(x, cardY, cardW, cardH);
+    ctx.strokeStyle = COL.line;
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(x + 4, cardY + 4, cardW - 8, cardH - 8);
+
+    // Hotkey badge
+    drawText('[' + (i + 1) + ']', x + 16, cardY + 26, {
+      font: FONT_MONO, size: 12, weight: 700, color: COL.accent, letterSpacing: 1,
+    });
+    drawText(def.short, x + cardW - 16, cardY + 26, {
+      font: FONT_MONO, size: 10, weight: 500, color: COL.muted, letterSpacing: 2, align: 'right',
+    });
+    drawLine(x + 14, cardY + 34, x + cardW - 14, cardY + 34, COL.ink, 0.5);
+
+    // Label (left side of card)
+    drawText(def.label, x + 20, cardY + 78, {
+      font: FONT_SERIF, size: 30, weight: 900, italic: true, color: COL.ink,
+    });
+    // Description below label
+    wrapText(def.desc, x + 20 + (cardW - 240) / 2, cardY + 108, cardW - 260, 15, {
+      font: FONT_SERIF, size: 12, italic: true, color: COL.muted, align: 'center',
+    });
+
+    // Level dots (bottom-left)
+    const dotsY = cardY + cardH - 36;
+    const dotSpacing = 18;
+    for (let j = 0; j < def.maxLevel; j++) {
+      const dx = x + 22 + j * dotSpacing;
+      ctx.beginPath();
+      ctx.arc(dx, dotsY, 5, 0, TAU);
+      if (j < level) {
+        ctx.fillStyle = COL.accent;
+        ctx.fill();
+      } else {
+        ctx.strokeStyle = COL.line;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    }
+    drawText(`NIVEL ${level} / ${def.maxLevel}`, x + 22, cardY + cardH - 14, {
+      font: FONT_MONO, size: 8, color: COL.muted, letterSpacing: 1.5, weight: 500,
+    });
+    if (level > 0) {
+      drawText(def.effectText(level), x + 22 + def.maxLevel * dotSpacing + 12, dotsY + 4, {
+        font: FONT_SERIF, size: 12, italic: true, color: COL.ok,
+      });
+    }
+
+    // Cost / button (right side of card)
+    const btnX = x + cardW - 150, btnY = cardY + 60, btnW = 130, btnH = 110;
+    ctx.strokeStyle = canAfford ? COL.accent : COL.line;
+    ctx.lineWidth = canAfford ? 1.5 : 0.8;
+    ctx.strokeRect(btnX, btnY, btnW, btnH);
+    if (maxed) {
+      drawText('MAX', btnX + btnW / 2, btnY + 55, {
+        font: FONT_SERIF, size: 28, weight: 900, italic: true,
+        color: COL.muted, align: 'center',
+      });
+      drawText('LEVEL', btnX + btnW / 2, btnY + 80, {
+        font: FONT_MONO, size: 9, color: COL.muted, align: 'center', letterSpacing: 2,
+      });
+    } else {
+      drawText('SIGUIENTE', btnX + btnW / 2, btnY + 22, {
+        font: FONT_MONO, size: 8, color: COL.muted, align: 'center', letterSpacing: 2,
+      });
+      const buyColor = canAfford ? COL.accent : COL.muted;
+      drawText(nextCost + 'h', btnX + btnW / 2, btnY + 60, {
+        font: FONT_SERIF, size: 30, weight: 900, italic: true,
+        color: buyColor, align: 'center',
+      });
+      drawText('pulsa [' + (i + 1) + ']', btnX + btnW / 2, btnY + 85, {
+        font: FONT_MONO, size: 9, color: buyColor, align: 'center', letterSpacing: 1.5, weight: 700,
+      });
+    }
+  }
+
+  // Bottom rule
+  drawLine(80, 695, W - 80, 695, COL.ink, 0.5);
+
+  // Footer controls
+  const pulse = (Math.sin(state.elapsed * 3) + 1) / 2;
+  ctx.globalAlpha = 0.6 + pulse * 0.4;
+  drawText('SPACE · VOLVER AL MENÚ          R · RESET PROGRESO', W / 2, 730, {
+    font: FONT_MONO, size: 12, weight: 700, color: COL.ink, align: 'center', letterSpacing: 2.5,
+  });
+  ctx.globalAlpha = 1;
+
+  // Reset confirmation prompt
+  if (state.shopResetConfirm) {
+    ctx.fillStyle = 'rgba(26, 22, 17, 0.85)';
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = COL.paper;
+    ctx.fillRect(W / 2 - 280, H / 2 - 80, 560, 160);
+    ctx.strokeStyle = COL.red;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(W / 2 - 280, H / 2 - 80, 560, 160);
+    drawText('¿RESETEAR PROGRESO?', W / 2, H / 2 - 30, {
+      font: FONT_SERIF, size: 28, weight: 900, italic: true, color: COL.red, align: 'center',
+    });
+    drawText('Perderás todas las horas y habilidades. Esto no se puede deshacer.',
+      W / 2, H / 2 + 5, {
+      font: FONT_SERIF, size: 13, italic: true, color: COL.ink, align: 'center',
+    });
+    drawText('Y · CONFIRMAR        N · CANCELAR', W / 2, H / 2 + 50, {
+      font: FONT_MONO, size: 12, weight: 700, color: COL.ink, align: 'center', letterSpacing: 2.5,
+    });
+  }
+
+  state.elapsed += 1/60;
+}
+
+function tryBuySkill(key) {
+  const skills = state.skills;
+  const def = SKILL_DEFS[key];
+  const level = skills[key];
+  if (level >= def.maxLevel) {
+    flash(W / 2, 320, 'MAX LEVEL', COL.muted);
+    return;
+  }
+  const cost = def.costs[level];
+  if ((skills.hours || 0) < cost) {
+    flash(W / 2, 320, 'NO HOURS', COL.red);
+    return;
+  }
+  skills.hours -= cost;
+  skills[key] += 1;
+  saveSkills(skills);
+  flash(W / 2, 320, '+1 ' + def.short, COL.accent);
+}
+
+function drawGameOver() {
+  clear();
+  drawText('— END OF SHIFT —', W / 2, 100, {
+    font: FONT_MONO, size: 12, color: COL.muted, align: 'center', letterSpacing: 4,
+  });
+  drawLine(80, 130, W - 80, 130, COL.ink, 1.2);
+  drawLine(80, 134, W - 80, 134, COL.ink, 0.4);
+
+  drawText('PR', W / 2 - 240, 290, {
+    font: FONT_SERIF, size: 160, weight: 900, italic: true, align: 'center', color: COL.ink,
+  });
+  drawText('MERGED', W / 2 + 100, 290, {
+    font: FONT_SERIF, size: 160, weight: 900, align: 'center', color: COL.accent,
+  });
+
+  drawText('PUNTUACIÓN', W / 2, 360, {
+    font: FONT_MONO, size: 10, color: COL.muted, align: 'center', letterSpacing: 3, weight: 500,
+  });
+  drawText(String(state.score).padStart(3, '0'), W / 2, 420, {
+    font: FONT_SERIF, size: 80, weight: 900, italic: true, align: 'center', color: COL.ink,
+  });
+
+  // Hours earned
+  const earned = state.earnedHours || 0;
+  const totalHours = state.skills.hours || 0;
+  drawLine(W / 2 - 280, 460, W / 2 + 280, 460, COL.ink, 0.5);
+  drawText('+' + String(earned).padStart(3, '0') + 'h', W / 2, 510, {
+    font: FONT_SERIF, size: 48, weight: 900, italic: true, color: COL.accent, align: 'center',
+  });
+  drawText('« horas ganadas con IA »', W / 2, 538, {
+    font: FONT_SERIF, size: 13, italic: true, color: COL.muted, align: 'center',
+  });
+  drawText('TOTAL · ' + totalHours + 'h disponibles', W / 2, 560, {
+    font: FONT_MONO, size: 10, color: COL.ink, align: 'center', letterSpacing: 2, weight: 700,
+  });
+  drawLine(W / 2 - 280, 580, W / 2 + 280, 580, COL.ink, 0.5);
+
+  // Stats row
+  const stats = [
+    ['PR ENVIADAS', String(state.shipped).padStart(2, '0')],
+    ['CON TDD', String(state.perfectFeatures).padStart(2, '0')],
+    ['EXPIRADAS', String(state.expired).padStart(2, '0')],
+  ];
+  for (let i = 0; i < stats.length; i++) {
+    const x = 320 + i * 220;
+    drawText(stats[i][0], x, 615, {
+      font: FONT_MONO, size: 9, color: COL.muted, align: 'center', letterSpacing: 2,
+    });
+    drawText(stats[i][1], x, 655, {
+      font: FONT_SERIF, size: 36, weight: 900, italic: true, color: COL.ink, align: 'center',
+    });
+  }
+  drawLine(80, 680, W - 80, 680, COL.ink, 0.5);
+
+  // CTAs
+  const pulse = (Math.sin(state.elapsed * 4) + 1) / 2;
+  ctx.globalAlpha = 0.7 + pulse * 0.3;
+  drawText('S · INVERTIR HORAS EN EL STUDIO', W / 2 - 220, 730, {
+    font: FONT_MONO, size: 12, weight: 700, color: COL.accent, align: 'center', letterSpacing: 2.5,
+  });
+  drawText('SPACE · NUEVA PARTIDA', W / 2 + 220, 730, {
+    font: FONT_MONO, size: 12, weight: 700, color: COL.ink, align: 'center', letterSpacing: 2.5,
+  });
+  ctx.globalAlpha = 1;
+  drawText('BEST · ' + String(state.bestScore).padStart(3, '0'), W / 2, 770, {
+    font: FONT_MONO, size: 10, color: COL.muted, align: 'center', letterSpacing: 2.5,
+  });
+
+  state.elapsed += 1/60;
+}
+
+function render() {
+  if (state.phase === 'menu') return drawMenu();
+  if (state.phase === 'gameover') return drawGameOver();
+  if (state.phase === 'shop') return drawShop();
+  clear();
+  drawHeader();
+  drawStatsBar();
+  drawPlayArea();
+  drawInboxQueue();
+  const hint = computeLearningHint();
+  for (const s of state.stations) drawStation(s, hint && hint.stationId === s.id);
+  drawLearningOverlay(hint);
+  drawAllSubagents();
+  drawAllPlayers();
+  drawFlashes();
+  drawFooter();
+}
+
+// ============================================================
+// HELPERS
+// ============================================================
+function formatTime(s) {
+  const m = Math.floor(s / 60);
+  const sec = Math.floor(s % 60);
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+// ============================================================
+// LOOP
+// ============================================================
+let lastT = performance.now();
+function loop(t) {
+  const dt = Math.min(0.05, (t - lastT) / 1000);
+  lastT = t;
+
+  if (state.phase === 'playing') update(dt);
+
+  // Handle transitions
+  if (pendingShopOpen) {
+    pendingShopOpen = false;
+    if (state.phase === 'gameover') {
+      state.phase = 'shop';
+      state.shopResetConfirm = false;
+      state.elapsed = 0;
+    }
+  }
+  if (pendingMenuFromShop) {
+    pendingMenuFromShop = false;
+    if (state.phase === 'shop') {
+      // Build a clean state but preserve persisted skills
+      const numPlayers = state.menuPlayers || 1;
+      state = newState(numPlayers);
+      state.phase = 'menu';
+    }
+  }
+  if (pendingStart) {
+    pendingStart = false;
+    if (state.phase === 'menu' || state.phase === 'gameover') {
+      const best = state.bestScore;
+      const numPlayers = state.menuPlayers || 1;
+      state = newState(numPlayers);
+      state.bestScore = best;
+      state.phase = 'playing';
+    }
+  }
+
+  render();
+  requestAnimationFrame(loop);
+}
+
+// ============================================================
+// INIT
+// ============================================================
+document.fonts.ready.then(() => {
+  document.getElementById('loading').classList.add('gone');
+  state = newState();
+  lastT = performance.now();
+  requestAnimationFrame(loop);
+});
+</script>
+</body>
+</html>
