@@ -13,6 +13,7 @@ import {
   processTimeMultiplier, subagentSlots, contextCostMultiplier, tryBuySkill,
 } from './skills.js';
 import { createState, makeStations } from './state.js';
+import { createInput, consumePresses, getInputDirFor } from './input.js';
 
 
 // ============================================================
@@ -41,72 +42,7 @@ import { createState, makeStations } from './state.js';
 // STATE
 // ============================================================
 let state = null;
-
-
-// Tutorial ticket scripts — assigned to the first 5 tickets in 1P mode
-
-
-// ============================================================
-// INPUT
-// ============================================================
-const keys = {};
-let pendingStart = false;
-let pendingShopOpen = false;
-let pendingMenuFromShop = false;
-
-window.addEventListener('keydown', e => {
-  if (!state) return;
-  const k = e.key.toLowerCase();
-  keys[k] = true;
-
-  // Prevent default for game keys
-  if (['arrowup','arrowdown','arrowleft','arrowright',' ','/'].includes(k)) {
-    e.preventDefault();
-  }
-
-  if (state.phase === 'playing') {
-    // Per-player interact / trash
-    for (const p of state.players) {
-      if (k === p.cfg.controls.interact) p.pendingInteract = true;
-      if (k === p.cfg.controls.trash)    p.pendingTrash = true;
-    }
-  } else if (state.phase === 'gameover') {
-    if (k === 's') pendingShopOpen = true;
-    if (k === ' ' || k === 'enter') pendingStart = true;
-  } else if (state.phase === 'shop') {
-    if (state.shopResetConfirm) {
-      if (k === 'y') { resetSkills(); state.skills = loadSkills(); state.shopResetConfirm = false; }
-      if (k === 'n' || k === 'escape') state.shopResetConfirm = false;
-    } else {
-      if (k === '1') tryBuySkill(state, 'SPEED');
-      if (k === '2') tryBuySkill(state, 'MODEL');
-      if (k === '3') tryBuySkill(state, 'SUBAGENT');
-      if (k === '4') tryBuySkill(state, 'CONTEXT');
-      if (k === 'r') state.shopResetConfirm = true;
-      if (k === ' ' || k === 'enter' || k === 'escape') pendingMenuFromShop = true;
-    }
-  } else {
-    // Menu
-    if (k === '1') state.menuPlayers = 1;
-    if (k === '2') state.menuPlayers = 2;
-    if (k === ' ' || k === 'enter') pendingStart = true;
-  }
-});
-window.addEventListener('keyup', e => {
-  if (!state) return;
-  keys[e.key.toLowerCase()] = false;
-});
-
-function getInputDirFor(player) {
-  const c = player.cfg.controls;
-  let x = 0, y = 0;
-  if (keys[c.left])  x -= 1;
-  if (keys[c.right]) x += 1;
-  if (keys[c.up])    y -= 1;
-  if (keys[c.down])  y += 1;
-  if (x && y) { x *= 0.7071; y *= 0.7071; }
-  return { x, y };
-}
+let input = null;
 
 // ============================================================
 // LOGIC
@@ -185,7 +121,7 @@ function updateContext(dt) {
 function updatePlayers(dt) {
   const speedMult = speedMultiplier(state.skills);
   for (const p of state.players) {
-    const dir = getInputDirFor(p);
+    const dir = getInputDirFor(p, input);
     p.vx = dir.x * PLAYER_SPEED * speedMult;
     p.vy = dir.y * PLAYER_SPEED * speedMult;
     p.x += p.vx * dt;
@@ -1810,42 +1746,65 @@ function render() {
 // ============================================================
 // LOOP
 // ============================================================
+function routeInput(input) {
+  for (const k of consumePresses(input)) {
+    if (state.phase === 'playing') {
+      for (const p of state.players) {
+        if (k === p.cfg.controls.interact) p.pendingInteract = true;
+        if (k === p.cfg.controls.trash)    p.pendingTrash = true;
+      }
+    } else if (state.phase === 'gameover') {
+      if (k === 's') openShop();
+      if (k === ' ' || k === 'enter') startGame();
+    } else if (state.phase === 'shop') {
+      if (state.shopResetConfirm) {
+        if (k === 'y') { resetSkills(); state.skills = loadSkills(); state.shopResetConfirm = false; }
+        if (k === 'n' || k === 'escape') state.shopResetConfirm = false;
+      } else {
+        if (k === '1') tryBuySkill(state, 'SPEED');
+        if (k === '2') tryBuySkill(state, 'MODEL');
+        if (k === '3') tryBuySkill(state, 'SUBAGENT');
+        if (k === '4') tryBuySkill(state, 'CONTEXT');
+        if (k === 'r') state.shopResetConfirm = true;
+        if (k === ' ' || k === 'enter' || k === 'escape') backToMenu();
+      }
+    } else { // menu
+      if (k === '1') state.menuPlayers = 1;
+      if (k === '2') state.menuPlayers = 2;
+      if (k === ' ' || k === 'enter') startGame();
+    }
+  }
+}
+
+function startGame() {
+  if (state.phase !== 'menu' && state.phase !== 'gameover') return;
+  const best = state.bestScore;
+  const numPlayers = state.menuPlayers || 1;
+  state = createState(numPlayers);
+  state.bestScore = best;
+  state.phase = 'playing';
+}
+
+function openShop() {
+  if (state.phase !== 'gameover') return;
+  state.phase = 'shop';
+  state.shopResetConfirm = false;
+  state.elapsed = 0;
+}
+
+function backToMenu() {
+  if (state.phase !== 'shop') return;
+  const numPlayers = state.menuPlayers || 1;
+  state = createState(numPlayers);
+  state.phase = 'menu';
+}
+
 let lastT = performance.now();
 function loop(t) {
   const dt = Math.min(0.05, (t - lastT) / 1000);
   lastT = t;
-
   if (state.phase === 'playing') update(dt);
-
-  // Handle transitions
-  if (pendingShopOpen) {
-    pendingShopOpen = false;
-    if (state.phase === 'gameover') {
-      state.phase = 'shop';
-      state.shopResetConfirm = false;
-      state.elapsed = 0;
-    }
-  }
-  if (pendingMenuFromShop) {
-    pendingMenuFromShop = false;
-    if (state.phase === 'shop') {
-      // Build a clean state but preserve persisted skills
-      const numPlayers = state.menuPlayers || 1;
-      state = createState(numPlayers);
-      state.phase = 'menu';
-    }
-  }
-  if (pendingStart) {
-    pendingStart = false;
-    if (state.phase === 'menu' || state.phase === 'gameover') {
-      const best = state.bestScore;
-      const numPlayers = state.menuPlayers || 1;
-      state = createState(numPlayers);
-      state.bestScore = best;
-      state.phase = 'playing';
-    }
-  }
-
+  routeInput(input);
   render();
   requestAnimationFrame(loop);
 }
@@ -1855,6 +1814,7 @@ function loop(t) {
 // ============================================================
 document.fonts.ready.then(() => {
   document.getElementById('loading').classList.add('gone');
+  input = createInput();
   state = createState();
   lastT = performance.now();
   requestAnimationFrame(loop);
