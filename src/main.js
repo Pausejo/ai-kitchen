@@ -1,128 +1,15 @@
-import {
-  TAU, W, H, COL, SKILL_DEFS, FONT_SERIF, FONT_MONO, CLAUDE_PATH,
-  PLAYER_CONFIGS, GAME_TIME, PLAYER_SPEED, PLAYER_R,
-  TICKET_LIFETIME_BUG, TICKET_LIFETIME_FEAT, CONTEXT_MAX, COMPACT_RATE,
-  SPAWN_BASE, SPAWN_MIN, SUBAGENT_SPEED, SUBAGENT_PROCESS_MULT,
-  SUBAGENT_DEPLOY_CTX, POINTS, BUG_DESCS, FEAT_DESCS, TUTORIAL_TICKETS,
-  formatTime,
-} from './config.js';
-import { distToStation, nearestStation, playerNearStation, anyPlayerNearStation } from './geometry.js';
-import { canvas, ctx, clear, drawText, drawLine, drawRect, wrapText } from './canvas2d.js';
-import {
-  loadSkills, saveSkills, resetSkills, speedMultiplier,
-  processTimeMultiplier, subagentSlots, contextCostMultiplier, tryBuySkill,
-} from './skills.js';
-import { createState, makeStations } from './state.js';
-import { createInput, consumePresses, getInputDirFor } from './input.js';
+// Composition root: posee el estado y el input, conduce el game loop y las
+// transiciones de fase. Cada frame: update(state, input, dt) → render(state).
+import { createState } from './state.js';
+import { createInput, consumePresses } from './input.js';
 import { update } from './systems/index.js';
 import { render } from './render/index.js';
+import { resetSkills, loadSkills, tryBuySkill } from './skills.js';
 
-
-// ============================================================
-// CONSTANTS
-// ============================================================
-
-
-// ============================================================
-// META-PROGRESSION: SKILLS (persistent across sessions)
-// ============================================================
-
-
-// Subagent gameplay constants
-
-
-// Claude logo SVG path (viewBox 0 0 24 24)
-
-// Player configurations (color, controls)
-
-// Game tuning
-
-
-// Content
-
-// ============================================================
-// STATE
-// ============================================================
 let state = null;
 let input = null;
 
-// ============================================================
-// LOGIC
-// ============================================================
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// Interpreta las pulsaciones del frame según la fase actual.
 function routeInput(input) {
   for (const k of consumePresses(input)) {
     if (state.phase === 'playing') {
@@ -186,9 +73,6 @@ function loop(t) {
   requestAnimationFrame(loop);
 }
 
-// ============================================================
-// INIT
-// ============================================================
 document.fonts.ready.then(() => {
   document.getElementById('loading').classList.add('gone');
   input = createInput();
