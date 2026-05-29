@@ -6,6 +6,7 @@ import {
   SUBAGENT_DEPLOY_CTX, POINTS, BUG_DESCS, FEAT_DESCS, TUTORIAL_TICKETS,
   formatTime,
 } from './config.js';
+import { distToStation, nearestStation, playerNearStation, anyPlayerNearStation } from './geometry.js';
 
 
 // ============================================================
@@ -292,29 +293,6 @@ function spawnIfDue(dt) {
   }
 }
 
-function distToStation(p, s) {
-  // Distance from point to nearest edge of station rect
-  const dx = Math.max(s.x - s.w/2 - p.x, 0, p.x - (s.x + s.w/2));
-  const dy = Math.max(s.y - s.h/2 - p.y, 0, p.y - (s.y + s.h/2));
-  return Math.sqrt(dx*dx + dy*dy);
-}
-
-function nearestStation(p, maxDist = 24) {
-  let best = null, bestD = Infinity;
-  for (const s of state.stations) {
-    const d = distToStation(p, s);
-    if (d < bestD && d <= maxDist) { best = s; bestD = d; }
-  }
-  return best;
-}
-
-function playerNearStation(player, s) {
-  return distToStation(player, s) <= 28;
-}
-
-function anyPlayerNearStation(s) {
-  return state.players.some(p => playerNearStation(p, s));
-}
 
 function updateContext(dt) {
   // Any player standing still at COMPACT drains context
@@ -585,7 +563,7 @@ function handleInteract() {
   for (const p of state.players) {
     if (!p.pendingInteract) continue;
     p.pendingInteract = false;
-    const s = nearestStation(p);
+    const s = nearestStation(p, state.stations);
     if (!s) continue;
     doInteract(p, s);
   }
@@ -1220,7 +1198,7 @@ function wrapText(text, x, y, maxW, lh, opts) {
 
 function drawStation(s, spotlighted) {
   const left = s.x - s.w/2, top = s.y - s.h/2;
-  const isNear = anyPlayerNearStation(s);
+  const isNear = anyPlayerNearStation(s, state.players);
   const isPR = s.kind === 'ship';
   const isInbox = s.kind === 'inbox';
 
@@ -1469,7 +1447,7 @@ function drawPlayer(p) {
   ctx.fill(CLAUDE_PATH);
   ctx.restore();
   // Highlight ring (when interaction available)
-  const nearS = nearestStation(p);
+  const nearS = nearestStation(p, state.stations);
   if (nearS) {
     ctx.strokeStyle = p.cfg.color;
     ctx.lineWidth = 2.5;
