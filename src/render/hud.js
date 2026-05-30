@@ -28,14 +28,6 @@ export function drawHeader() {
     .toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric" })
     .toUpperCase();
   drawText(dateText, W - 40, 50, { font: FONT_MONO, size: 9, color: COL.muted, align: "right", letterSpacing: 1.5 });
-  drawText("PG. 01 / 01", W - 40, 70, {
-    font: FONT_MONO,
-    size: 9,
-    color: COL.muted,
-    align: "right",
-    letterSpacing: 1.5,
-  });
-  drawText("CLAUDE & CO.", W - 40, 90, { font: FONT_SERIF, size: 14, italic: true, color: COL.ink, align: "right" });
 
   // Horizontal rules
   drawLine(40, 130, W - 40, 130, COL.ink, 1.2);
@@ -57,8 +49,8 @@ export function drawStatsBar(state) {
     },
     {
       x: 320,
-      label: "PUNTUACIÓN",
-      value: String(state.score).padStart(3, "0"),
+      label: "H. AHORRADAS",
+      value: String(state.score).padStart(3, "0") + "h",
       sub: `BEST ${String(state.bestScore).padStart(3, "0")}`,
       font: FONT_SERIF,
       weight: 900,

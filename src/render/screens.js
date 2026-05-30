@@ -569,7 +569,7 @@ export function drawGameOver(state) {
     color: COL.accent,
   });
 
-  drawText("PUNTUACIÓN", W / 2, 360, {
+  drawText("H. AHORRADAS", W / 2, 360, {
     font: FONT_MONO,
     size: 10,
     color: COL.muted,
