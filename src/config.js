@@ -84,7 +84,7 @@ export const PLAYER_CONFIGS = [
     id: "C-1",
     color: "#D97757", // Claude orange
     badge: "#1A1611", // ink badge bg
-    label: "C-1",
+    label: "J1",
     controls: {
       up: "w",
       down: "s",
@@ -98,7 +98,7 @@ export const PLAYER_CONFIGS = [
     id: "C-2",
     color: "#3A8F8F", // Deep teal
     badge: "#1A1611",
-    label: "C-2",
+    label: "J2",
     controls: {
       up: "arrowup",
       down: "arrowdown",

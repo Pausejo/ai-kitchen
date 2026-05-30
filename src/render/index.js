@@ -56,7 +56,7 @@ function computeLearningHint(state) {
   }
   // Priority 4: ticket in inbox
   if (state.inbox.length > 0) {
-    return { text: "Recoge el ticket en INBOX. Pulsa F (jugador C-1) o / (C-2).", stationId: "INBOX" };
+    return { text: "Recoge el ticket en INBOX. Pulsa F (J1) o / (J2).", stationId: "INBOX" };
   }
   // Priority 5: context warning
   if (state.context >= 70) {

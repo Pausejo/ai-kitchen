@@ -156,7 +156,7 @@ export function drawMenu(state) {
   drawLine(150, 565, W - 150, 565, COL.ink, 0.5);
 
   // Controls — two columns
-  drawText("§ CONTROLES — C-1", 150, 600, {
+  drawText("§ CONTROLES — J1", 150, 600, {
     font: FONT_MONO,
     size: 10,
     color: PLAYER_CONFIGS[0].color,
@@ -185,7 +185,7 @@ export function drawMenu(state) {
   }
 
   if (state.menuPlayers === 2) {
-    drawText("§ CONTROLES — C-2", 670, 600, {
+    drawText("§ CONTROLES — J2", 670, 600, {
       font: FONT_MONO,
       size: 10,
       color: PLAYER_CONFIGS[1].color,
@@ -250,7 +250,7 @@ export function drawMenu(state) {
     if (sk.CONTEXT > 0) parts.push(`CTX ${sk.CONTEXT}/${SKILL_DEFS.CONTEXT.maxLevel}`);
     if (sk.AUTOCOMPACT > 0) parts.push(`A-CPT ${sk.AUTOCOMPACT}/${SKILL_DEFS.AUTOCOMPACT.maxLevel}`);
     parts.push(`${sk.hours || 0}h`);
-    drawText("STUDIO · " + parts.join("  ·  "), W / 2, 786, {
+    drawText("FROMACIÓN · " + parts.join("  ·  "), W / 2, 786, {
       font: FONT_MONO,
       size: 10,
       color: COL.accent,
