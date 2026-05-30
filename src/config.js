@@ -24,7 +24,7 @@ export const COL = {
 
 export const SKILL_DEFS = {
   SPEED: {
-    label: "VELOCIDAD",
+    label: "↑ VELOCIDAD",
     short: "SPEED",
     desc: "Más rápido al moverte entre estaciones.",
     maxLevel: 5,
@@ -32,7 +32,7 @@ export const SKILL_DEFS = {
     effectText: (l) => `+${l * 10}% velocidad`,
   },
   MODEL: {
-    label: "MODELO",
+    label: "NEW MODEL",
     short: "MODEL",
     desc: "Plan, TDD y Code procesan más rápido.",
     maxLevel: 3,
@@ -48,7 +48,7 @@ export const SKILL_DEFS = {
     effectText: (l) => `${l} subagente${l === 1 ? "" : "s"} disponible${l === 1 ? "" : "s"}`,
   },
   CONTEXT: {
-    label: "CONTEXTO",
+    label: "↑ CONTEXT",
     short: "CONTEXT",
     desc: "Cada acción consume menos ventana de contexto.",
     maxLevel: 5,
@@ -161,9 +161,7 @@ export const TUTORIAL_TICKETS = [
 ];
 
 // Tutorial de subagentes: una sola tarea para aprender a delegar.
-export const SUBAGENT_TUTORIAL_TICKETS = [
-  { type: "BUG", desc: "Favicon roto", hint: "SUÉLTALO EN α1 · TRABAJA SOLO" },
-];
+export const SUBAGENT_TUTORIAL_TICKETS = [{ type: "BUG", desc: "Favicon roto", hint: "SUÉLTALO EN α1 · TRABAJA SOLO" }];
 
 export function formatTime(s) {
   const m = Math.floor(s / 60);

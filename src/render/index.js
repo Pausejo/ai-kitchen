@@ -11,7 +11,10 @@ function computeSubagentHint(state) {
   }
   const busy = state.subagents.some((sa) => sa.state !== "idle");
   if (busy) {
-    return { text: "El subagente hace PLAN → CODE → PR solo (es más lento). Observa.", stationId: "SUBA_0" };
+    return {
+      text: "El subagente hace PLAN → CODE → PR solo (es más lento, pero no consume contexto).",
+      stationId: "SUBA_0",
+    };
   }
   if (state.inbox.length > 0) {
     return { text: "Recoge el ticket en INBOX y llévalo a la caja SUBAGENT (α1).", stationId: "INBOX" };
