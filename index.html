@@ -2458,7 +2458,7 @@
       });
 
       // Title
-      drawText("STUDIO", W / 2, 175, {
+      drawText("FORMACIÓN", W / 2, 175, {
         font: FONT_SERIF,
         size: 100,
         weight: 900,
@@ -2640,13 +2640,10 @@
         }
       }
 
-      // Bottom rule
-      drawLine(80, 695, W - 80, 695, COL.ink, 0.5);
-
-      // Footer controls
+      // Footer controls (encima de la línea, en el hueco bajo las cards)
       const pulse = (Math.sin(state.elapsed * 3) + 1) / 2;
       ctx.globalAlpha = 0.6 + pulse * 0.4;
-      drawText("SPACE · VOLVER AL MENÚ          R · RESET PROGRESO", W / 2, 730, {
+      drawText("SPACE · VOLVER AL MENÚ          R · RESET PROGRESO", W / 2, 748, {
         font: FONT_MONO,
         size: 12,
         weight: 700,
@@ -2655,6 +2652,9 @@
         letterSpacing: 2.5,
       });
       ctx.globalAlpha = 1;
+
+      // Bottom rule — al mismo sitio que en la pantalla de inicio (y=770)
+      drawLine(80, 770, W - 80, 770, COL.ink, 0.5);
 
       // Reset confirmation prompt
       if (state.shopResetConfirm) {
@@ -2705,7 +2705,7 @@
       drawLine(80, 130, W - 80, 130, COL.ink, 1.2);
       drawLine(80, 134, W - 80, 134, COL.ink, 0.4);
 
-      drawText("PR", W / 2 - 240, 290, {
+      drawText("PR", W / 2 - 260, 290, {
         font: FONT_SERIF,
         size: 140,
         weight: 900,
