@@ -41,6 +41,7 @@ function routeInput(input) {
       // menu
       if (k === "1") state.menuPlayers = 1;
       if (k === "2") state.menuPlayers = 2;
+      if (k === "s") openShop();
       if (k === " " || k === "enter") startGame();
     }
   }
@@ -56,7 +57,7 @@ function startGame() {
 }
 
 function openShop() {
-  if (state.phase !== "gameover") return;
+  if (state.phase !== "gameover" && state.phase !== "menu") return;
   state.phase = "shop";
   state.shopResetConfirm = false;
   state.elapsed = 0;

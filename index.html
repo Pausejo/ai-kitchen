@@ -2384,7 +2384,7 @@
       // CTA
       const pulse = (Math.sin(state.elapsed * 3) + 1) / 2;
       ctx.globalAlpha = 0.5 + pulse * 0.5;
-      drawText("▸  PULSA  SPACE  PARA  EMPEZAR  ◂", W / 2, 745, {
+      drawText("▸  SPACE · EMPEZAR        S · STUDIO  ◂", W / 2, 745, {
         font: FONT_MONO,
         size: 14,
         weight: 700,
@@ -2404,6 +2404,7 @@
         if (sk.MODEL > 0) parts.push(`MDL ${sk.MODEL}/${SKILL_DEFS.MODEL.maxLevel}`);
         if (sk.SUBAGENT > 0) parts.push(`SUB ${sk.SUBAGENT}/${SKILL_DEFS.SUBAGENT.maxLevel}`);
         if (sk.CONTEXT > 0) parts.push(`CTX ${sk.CONTEXT}/${SKILL_DEFS.CONTEXT.maxLevel}`);
+        if (sk.AUTOCOMPACT > 0) parts.push(`A-CPT ${sk.AUTOCOMPACT}/${SKILL_DEFS.AUTOCOMPACT.maxLevel}`);
         parts.push(`${sk.hours || 0}h`);
         drawText("STUDIO · " + parts.join("  ·  "), W / 2, 786, {
           font: FONT_MONO,
@@ -2706,7 +2707,7 @@
 
       drawText("PR", W / 2 - 240, 290, {
         font: FONT_SERIF,
-        size: 160,
+        size: 140,
         weight: 900,
         italic: true,
         align: "center",
@@ -2714,7 +2715,7 @@
       });
       drawText("MERGED", W / 2 + 100, 290, {
         font: FONT_SERIF,
-        size: 160,
+        size: 140,
         weight: 900,
         align: "center",
         color: COL.accent,
@@ -2959,6 +2960,7 @@
           // menu
           if (k === "1") state.menuPlayers = 1;
           if (k === "2") state.menuPlayers = 2;
+          if (k === "s") openShop();
           if (k === " " || k === "enter") startGame();
         }
       }
@@ -2974,7 +2976,7 @@
     }
 
     function openShop() {
-      if (state.phase !== "gameover") return;
+      if (state.phase !== "gameover" && state.phase !== "menu") return;
       state.phase = "shop";
       state.shopResetConfirm = false;
       state.elapsed = 0;

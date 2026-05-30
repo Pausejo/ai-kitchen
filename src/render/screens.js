@@ -228,7 +228,7 @@ export function drawMenu(state) {
   // CTA
   const pulse = (Math.sin(state.elapsed * 3) + 1) / 2;
   ctx.globalAlpha = 0.5 + pulse * 0.5;
-  drawText("▸  PULSA  SPACE  PARA  EMPEZAR  ◂", W / 2, 745, {
+  drawText("▸  SPACE · EMPEZAR        S · STUDIO  ◂", W / 2, 745, {
     font: FONT_MONO,
     size: 14,
     weight: 700,
@@ -248,6 +248,7 @@ export function drawMenu(state) {
     if (sk.MODEL > 0) parts.push(`MDL ${sk.MODEL}/${SKILL_DEFS.MODEL.maxLevel}`);
     if (sk.SUBAGENT > 0) parts.push(`SUB ${sk.SUBAGENT}/${SKILL_DEFS.SUBAGENT.maxLevel}`);
     if (sk.CONTEXT > 0) parts.push(`CTX ${sk.CONTEXT}/${SKILL_DEFS.CONTEXT.maxLevel}`);
+    if (sk.AUTOCOMPACT > 0) parts.push(`A-CPT ${sk.AUTOCOMPACT}/${SKILL_DEFS.AUTOCOMPACT.maxLevel}`);
     parts.push(`${sk.hours || 0}h`);
     drawText("STUDIO · " + parts.join("  ·  "), W / 2, 786, {
       font: FONT_MONO,
@@ -550,7 +551,7 @@ export function drawGameOver(state) {
 
   drawText("PR", W / 2 - 240, 290, {
     font: FONT_SERIF,
-    size: 160,
+    size: 140,
     weight: 900,
     italic: true,
     align: "center",
@@ -558,7 +559,7 @@ export function drawGameOver(state) {
   });
   drawText("MERGED", W / 2 + 100, 290, {
     font: FONT_SERIF,
-    size: 160,
+    size: 140,
     weight: 900,
     align: "center",
     color: COL.accent,
