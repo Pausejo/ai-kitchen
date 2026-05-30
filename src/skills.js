@@ -1,5 +1,5 @@
 // Meta-progresión: persistencia en localStorage y efectos derivados.
-import { SKILL_DEFS, W, COL } from "./config.js";
+import { SKILL_DEFS, W, COL, AUTOCOMPACT_INTERVALS } from "./config.js";
 import { flash } from "./effects.js";
 
 export function loadSkills() {
@@ -12,11 +12,12 @@ export function loadSkills() {
         MODEL: parsed.MODEL || 0,
         SUBAGENT: parsed.SUBAGENT || 0,
         CONTEXT: parsed.CONTEXT || 0,
+        AUTOCOMPACT: parsed.AUTOCOMPACT || 0,
         hours: parsed.hours || 0,
       };
     }
   } catch (e) {}
-  return { SPEED: 0, MODEL: 0, SUBAGENT: 0, CONTEXT: 0, hours: 0 };
+  return { SPEED: 0, MODEL: 0, SUBAGENT: 0, CONTEXT: 0, AUTOCOMPACT: 0, hours: 0 };
 }
 
 export function saveSkills(skills) {
@@ -73,6 +74,11 @@ export function subagentSlots(skills) {
 }
 export function contextCostMultiplier(skills) {
   return 1 - (skills.CONTEXT || 0) * 0.1;
+}
+// Intervalo (s) del auto-compact según nivel; 0 si no se tiene la skill.
+export function autoCompactInterval(skills) {
+  const lvl = skills.AUTOCOMPACT || 0;
+  return lvl > 0 ? AUTOCOMPACT_INTERVALS[lvl - 1] : 0;
 }
 
 export function tryBuySkill(state, key) {

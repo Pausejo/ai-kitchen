@@ -133,7 +133,18 @@
         costs: [40, 70, 110, 170, 240],
         effectText: (l) => `-${l * 10}% coste por acción`,
       },
+      AUTOCOMPACT: {
+        label: "AUTO-COMPACT",
+        short: "AUTO-CPT",
+        desc: "Compacta solo: baja el contexto al 20% cada cierto tiempo.",
+        maxLevel: 3,
+        costs: [120, 220, 360],
+        effectText: (l) => `cada ${[40, 30, 20][l - 1]}s → 20%`,
+      },
     };
+
+    // Intervalo (segundos) del auto-compact por nivel; 0 = desactivado.
+    const AUTOCOMPACT_INTERVALS = [40, 30, 20];
 
     const SUBAGENT_SPEED = 130; // slower than player
     const SUBAGENT_PROCESS_MULT = 2.0; // 2x the time at each station
@@ -390,11 +401,12 @@
             MODEL: parsed.MODEL || 0,
             SUBAGENT: parsed.SUBAGENT || 0,
             CONTEXT: parsed.CONTEXT || 0,
+            AUTOCOMPACT: parsed.AUTOCOMPACT || 0,
             hours: parsed.hours || 0,
           };
         }
       } catch (e) {}
-      return { SPEED: 0, MODEL: 0, SUBAGENT: 0, CONTEXT: 0, hours: 0 };
+      return { SPEED: 0, MODEL: 0, SUBAGENT: 0, CONTEXT: 0, AUTOCOMPACT: 0, hours: 0 };
     }
 
     function saveSkills(skills) {
@@ -451,6 +463,11 @@
     }
     function contextCostMultiplier(skills) {
       return 1 - (skills.CONTEXT || 0) * 0.1;
+    }
+    // Intervalo (s) del auto-compact según nivel; 0 si no se tiene la skill.
+    function autoCompactInterval(skills) {
+      const lvl = skills.AUTOCOMPACT || 0;
+      return lvl > 0 ? AUTOCOMPACT_INTERVALS[lvl - 1] : 0;
     }
 
     function tryBuySkill(state, key) {
@@ -612,6 +629,7 @@
         learningCompacted: false,
         subagentShipped: 0,
         learningTicketIdx: 0,
+        autoCompactTimer: 0,
       };
     }
 
@@ -1044,6 +1062,20 @@
         state.context = Math.max(0, state.context - COMPACT_RATE * dt);
         // Lección de COMPACT del tutorial: cuenta solo tras enviar bug+feature
         if (state.learningPhase && state.shipped >= 2) state.learningCompacted = true;
+      }
+
+      // Skill AUTO-COMPACT: cada cierto tiempo baja el contexto al 20%.
+      const interval = autoCompactInterval(state.skills);
+      if (interval > 0) {
+        state.autoCompactTimer += dt;
+        if (state.autoCompactTimer >= interval) {
+          state.autoCompactTimer = 0;
+          const floor = CONTEXT_MAX * 0.2;
+          if (state.context > floor) {
+            state.context = floor;
+            flash(state, cs.x, cs.y - cs.h / 2 - 16, "AUTO-COMPACT", COL.accent);
+          }
+        }
       }
     }
 
@@ -2462,15 +2494,16 @@
         align: "center",
       });
 
-      // Four skill cards in a 2×2 grid
-      const skillKeys = ["SPEED", "MODEL", "SUBAGENT", "CONTEXT"];
-      const cardW = 480,
-        cardH = 200,
-        gapX = 32,
-        gapY = 22;
-      const totalW = cardW * 2 + gapX;
+      // Skill cards en una rejilla de 3 columnas
+      const skillKeys = ["SPEED", "MODEL", "SUBAGENT", "CONTEXT", "AUTOCOMPACT"];
+      const cols = 3;
+      const cardW = 360,
+        cardH = 190,
+        gapX = 24,
+        gapY = 18;
+      const totalW = cardW * cols + gapX * (cols - 1);
       const startX = (W - totalW) / 2;
-      const startY = 335;
+      const startY = 320;
 
       for (let i = 0; i < skillKeys.length; i++) {
         const key = skillKeys[i];
@@ -2479,8 +2512,8 @@
         const maxed = level >= def.maxLevel;
         const nextCost = maxed ? null : def.costs[level];
         const canAfford = !maxed && hours >= nextCost;
-        const col = i % 2;
-        const row = Math.floor(i / 2);
+        const col = i % cols;
+        const row = Math.floor(i / cols);
         const x = startX + col * (cardW + gapX);
         const cardY = startY + row * (cardH + gapY);
 
@@ -2513,29 +2546,29 @@
         drawLine(x + 14, cardY + 34, x + cardW - 14, cardY + 34, COL.ink, 0.5);
 
         // Label (left side of card)
-        drawText(def.label, x + 20, cardY + 78, {
+        drawText(def.label, x + 20, cardY + 70, {
           font: FONT_SERIF,
-          size: 30,
+          size: 24,
           weight: 900,
           italic: true,
           color: COL.ink,
         });
-        // Description below label
-        wrapText(def.desc, x + 20 + (cardW - 240) / 2, cardY + 108, cardW - 260, 15, {
+        // Description below label (left-aligned, deja sitio al botón a la derecha)
+        wrapText(def.desc, x + 20, cardY + 92, cardW - 168, 14, {
           font: FONT_SERIF,
-          size: 12,
+          size: 11,
           italic: true,
           color: COL.muted,
-          align: "center",
+          align: "left",
         });
 
         // Level dots (bottom-left)
-        const dotsY = cardY + cardH - 36;
-        const dotSpacing = 18;
+        const dotsY = cardY + cardH - 38;
+        const dotSpacing = 16;
         for (let j = 0; j < def.maxLevel; j++) {
           const dx = x + 22 + j * dotSpacing;
           ctx.beginPath();
-          ctx.arc(dx, dotsY, 5, 0, TAU);
+          ctx.arc(dx, dotsY, 4.5, 0, TAU);
           if (j < level) {
             ctx.fillStyle = COL.accent;
             ctx.fill();
@@ -2545,40 +2578,33 @@
             ctx.stroke();
           }
         }
-        drawText(`NIVEL ${level} / ${def.maxLevel}`, x + 22, cardY + cardH - 14, {
+        const nivelText = `NIVEL ${level}/${def.maxLevel}` + (level > 0 ? "  ·  " + def.effectText(level) : "");
+        drawText(nivelText, x + 22, cardY + cardH - 14, {
           font: FONT_MONO,
           size: 8,
-          color: COL.muted,
-          letterSpacing: 1.5,
+          color: level > 0 ? COL.ok : COL.muted,
+          letterSpacing: 1,
           weight: 500,
         });
-        if (level > 0) {
-          drawText(def.effectText(level), x + 22 + def.maxLevel * dotSpacing + 12, dotsY + 4, {
-            font: FONT_SERIF,
-            size: 12,
-            italic: true,
-            color: COL.ok,
-          });
-        }
 
         // Cost / button (right side of card)
-        const btnX = x + cardW - 150,
-          btnY = cardY + 60,
-          btnW = 130,
-          btnH = 110;
+        const btnX = x + cardW - 138,
+          btnY = cardY + 48,
+          btnW = 122,
+          btnH = 96;
         ctx.strokeStyle = canAfford ? COL.accent : COL.line;
         ctx.lineWidth = canAfford ? 1.5 : 0.8;
         ctx.strokeRect(btnX, btnY, btnW, btnH);
         if (maxed) {
-          drawText("MAX", btnX + btnW / 2, btnY + 55, {
+          drawText("MAX", btnX + btnW / 2, btnY + 48, {
             font: FONT_SERIF,
-            size: 28,
+            size: 26,
             weight: 900,
             italic: true,
             color: COL.muted,
             align: "center",
           });
-          drawText("LEVEL", btnX + btnW / 2, btnY + 80, {
+          drawText("LEVEL", btnX + btnW / 2, btnY + 72, {
             font: FONT_MONO,
             size: 9,
             color: COL.muted,
@@ -2586,7 +2612,7 @@
             letterSpacing: 2,
           });
         } else {
-          drawText("SIGUIENTE", btnX + btnW / 2, btnY + 22, {
+          drawText("SIGUIENTE", btnX + btnW / 2, btnY + 20, {
             font: FONT_MONO,
             size: 8,
             color: COL.muted,
@@ -2594,15 +2620,15 @@
             letterSpacing: 2,
           });
           const buyColor = canAfford ? COL.accent : COL.muted;
-          drawText(nextCost + "h", btnX + btnW / 2, btnY + 60, {
+          drawText(nextCost + "h", btnX + btnW / 2, btnY + 52, {
             font: FONT_SERIF,
-            size: 30,
+            size: 28,
             weight: 900,
             italic: true,
             color: buyColor,
             align: "center",
           });
-          drawText("pulsa [" + (i + 1) + "]", btnX + btnW / 2, btnY + 85, {
+          drawText("pulsa [" + (i + 1) + "]", btnX + btnW / 2, btnY + 78, {
             font: FONT_MONO,
             size: 9,
             color: buyColor,
@@ -2810,7 +2836,10 @@
       }
       const busy = state.subagents.some((sa) => sa.state !== "idle");
       if (busy) {
-        return { text: "El subagente hace PLAN → CODE → PR solo (es más lento). Observa.", stationId: "SUBA_0" };
+        return {
+          text: "El subagente hace PLAN → CODE → PR solo (es más lento, pero no consume contexto).",
+          stationId: "SUBA_0",
+        };
       }
       if (state.inbox.length > 0) {
         return { text: "Recoge el ticket en INBOX y llévalo a la caja SUBAGENT (α1).", stationId: "INBOX" };
@@ -2922,6 +2951,7 @@
             if (k === "2") tryBuySkill(state, "MODEL");
             if (k === "3") tryBuySkill(state, "SUBAGENT");
             if (k === "4") tryBuySkill(state, "CONTEXT");
+            if (k === "5") tryBuySkill(state, "AUTOCOMPACT");
             if (k === "r") state.shopResetConfirm = true;
             if (k === " " || k === "enter" || k === "escape") backToMenu();
           }

@@ -98,6 +98,7 @@ export function createState(numPlayers = 1) {
     learningCompacted: false,
     subagentShipped: 0,
     learningTicketIdx: 0,
+    autoCompactTimer: 0,
   };
 }
 

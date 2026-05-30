@@ -33,6 +33,7 @@ function routeInput(input) {
         if (k === "2") tryBuySkill(state, "MODEL");
         if (k === "3") tryBuySkill(state, "SUBAGENT");
         if (k === "4") tryBuySkill(state, "CONTEXT");
+        if (k === "5") tryBuySkill(state, "AUTOCOMPACT");
         if (k === "r") state.shopResetConfirm = true;
         if (k === " " || k === "enter" || k === "escape") backToMenu();
       }

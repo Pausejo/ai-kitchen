@@ -55,7 +55,18 @@ export const SKILL_DEFS = {
     costs: [40, 70, 110, 170, 240],
     effectText: (l) => `-${l * 10}% coste por acción`,
   },
+  AUTOCOMPACT: {
+    label: "AUTO-COMPACT",
+    short: "AUTO-CPT",
+    desc: "Compacta solo: baja el contexto al 20% cada cierto tiempo.",
+    maxLevel: 3,
+    costs: [120, 220, 360],
+    effectText: (l) => `cada ${[40, 30, 20][l - 1]}s → 20%`,
+  },
 };
+
+// Intervalo (segundos) del auto-compact por nivel; 0 = desactivado.
+export const AUTOCOMPACT_INTERVALS = [40, 30, 20];
 
 export const SUBAGENT_SPEED = 130; // slower than player
 export const SUBAGENT_PROCESS_MULT = 2.0; // 2x the time at each station

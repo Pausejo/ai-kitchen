@@ -338,15 +338,16 @@ export function drawShop(state) {
     align: "center",
   });
 
-  // Four skill cards in a 2×2 grid
-  const skillKeys = ["SPEED", "MODEL", "SUBAGENT", "CONTEXT"];
-  const cardW = 480,
-    cardH = 200,
-    gapX = 32,
-    gapY = 22;
-  const totalW = cardW * 2 + gapX;
+  // Skill cards en una rejilla de 3 columnas
+  const skillKeys = ["SPEED", "MODEL", "SUBAGENT", "CONTEXT", "AUTOCOMPACT"];
+  const cols = 3;
+  const cardW = 360,
+    cardH = 190,
+    gapX = 24,
+    gapY = 18;
+  const totalW = cardW * cols + gapX * (cols - 1);
   const startX = (W - totalW) / 2;
-  const startY = 335;
+  const startY = 320;
 
   for (let i = 0; i < skillKeys.length; i++) {
     const key = skillKeys[i];
@@ -355,8 +356,8 @@ export function drawShop(state) {
     const maxed = level >= def.maxLevel;
     const nextCost = maxed ? null : def.costs[level];
     const canAfford = !maxed && hours >= nextCost;
-    const col = i % 2;
-    const row = Math.floor(i / 2);
+    const col = i % cols;
+    const row = Math.floor(i / cols);
     const x = startX + col * (cardW + gapX);
     const cardY = startY + row * (cardH + gapY);
 
@@ -389,29 +390,29 @@ export function drawShop(state) {
     drawLine(x + 14, cardY + 34, x + cardW - 14, cardY + 34, COL.ink, 0.5);
 
     // Label (left side of card)
-    drawText(def.label, x + 20, cardY + 78, {
+    drawText(def.label, x + 20, cardY + 70, {
       font: FONT_SERIF,
-      size: 30,
+      size: 24,
       weight: 900,
       italic: true,
       color: COL.ink,
     });
-    // Description below label
-    wrapText(def.desc, x + 20 + (cardW - 240) / 2, cardY + 108, cardW - 260, 15, {
+    // Description below label (left-aligned, deja sitio al botón a la derecha)
+    wrapText(def.desc, x + 20, cardY + 92, cardW - 168, 14, {
       font: FONT_SERIF,
-      size: 12,
+      size: 11,
       italic: true,
       color: COL.muted,
-      align: "center",
+      align: "left",
     });
 
     // Level dots (bottom-left)
-    const dotsY = cardY + cardH - 36;
-    const dotSpacing = 18;
+    const dotsY = cardY + cardH - 38;
+    const dotSpacing = 16;
     for (let j = 0; j < def.maxLevel; j++) {
       const dx = x + 22 + j * dotSpacing;
       ctx.beginPath();
-      ctx.arc(dx, dotsY, 5, 0, TAU);
+      ctx.arc(dx, dotsY, 4.5, 0, TAU);
       if (j < level) {
         ctx.fillStyle = COL.accent;
         ctx.fill();
@@ -421,40 +422,33 @@ export function drawShop(state) {
         ctx.stroke();
       }
     }
-    drawText(`NIVEL ${level} / ${def.maxLevel}`, x + 22, cardY + cardH - 14, {
+    const nivelText = `NIVEL ${level}/${def.maxLevel}` + (level > 0 ? "  ·  " + def.effectText(level) : "");
+    drawText(nivelText, x + 22, cardY + cardH - 14, {
       font: FONT_MONO,
       size: 8,
-      color: COL.muted,
-      letterSpacing: 1.5,
+      color: level > 0 ? COL.ok : COL.muted,
+      letterSpacing: 1,
       weight: 500,
     });
-    if (level > 0) {
-      drawText(def.effectText(level), x + 22 + def.maxLevel * dotSpacing + 12, dotsY + 4, {
-        font: FONT_SERIF,
-        size: 12,
-        italic: true,
-        color: COL.ok,
-      });
-    }
 
     // Cost / button (right side of card)
-    const btnX = x + cardW - 150,
-      btnY = cardY + 60,
-      btnW = 130,
-      btnH = 110;
+    const btnX = x + cardW - 138,
+      btnY = cardY + 48,
+      btnW = 122,
+      btnH = 96;
     ctx.strokeStyle = canAfford ? COL.accent : COL.line;
     ctx.lineWidth = canAfford ? 1.5 : 0.8;
     ctx.strokeRect(btnX, btnY, btnW, btnH);
     if (maxed) {
-      drawText("MAX", btnX + btnW / 2, btnY + 55, {
+      drawText("MAX", btnX + btnW / 2, btnY + 48, {
         font: FONT_SERIF,
-        size: 28,
+        size: 26,
         weight: 900,
         italic: true,
         color: COL.muted,
         align: "center",
       });
-      drawText("LEVEL", btnX + btnW / 2, btnY + 80, {
+      drawText("LEVEL", btnX + btnW / 2, btnY + 72, {
         font: FONT_MONO,
         size: 9,
         color: COL.muted,
@@ -462,7 +456,7 @@ export function drawShop(state) {
         letterSpacing: 2,
       });
     } else {
-      drawText("SIGUIENTE", btnX + btnW / 2, btnY + 22, {
+      drawText("SIGUIENTE", btnX + btnW / 2, btnY + 20, {
         font: FONT_MONO,
         size: 8,
         color: COL.muted,
@@ -470,15 +464,15 @@ export function drawShop(state) {
         letterSpacing: 2,
       });
       const buyColor = canAfford ? COL.accent : COL.muted;
-      drawText(nextCost + "h", btnX + btnW / 2, btnY + 60, {
+      drawText(nextCost + "h", btnX + btnW / 2, btnY + 52, {
         font: FONT_SERIF,
-        size: 30,
+        size: 28,
         weight: 900,
         italic: true,
         color: buyColor,
         align: "center",
       });
-      drawText("pulsa [" + (i + 1) + "]", btnX + btnW / 2, btnY + 85, {
+      drawText("pulsa [" + (i + 1) + "]", btnX + btnW / 2, btnY + 78, {
         font: FONT_MONO,
         size: 9,
         color: buyColor,

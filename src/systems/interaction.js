@@ -1,6 +1,6 @@
 // Acciones del jugador: pick/drop/ship/compact/subagente + contexto.
 import { CONTEXT_MAX, POINTS, SUBAGENT_DEPLOY_CTX, COMPACT_RATE, COL } from "../config.js";
-import { contextCostMultiplier } from "../skills.js";
+import { contextCostMultiplier, autoCompactInterval } from "../skills.js";
 import { nearestStation, playerNearStation } from "../geometry.js";
 import { flash } from "../effects.js";
 import { pickSubagentNextStation } from "./subagents.js";
@@ -21,6 +21,20 @@ export function updateContext(state, dt) {
     state.context = Math.max(0, state.context - COMPACT_RATE * dt);
     // Lección de COMPACT del tutorial: cuenta solo tras enviar bug+feature
     if (state.learningPhase && state.shipped >= 2) state.learningCompacted = true;
+  }
+
+  // Skill AUTO-COMPACT: cada cierto tiempo baja el contexto al 20%.
+  const interval = autoCompactInterval(state.skills);
+  if (interval > 0) {
+    state.autoCompactTimer += dt;
+    if (state.autoCompactTimer >= interval) {
+      state.autoCompactTimer = 0;
+      const floor = CONTEXT_MAX * 0.2;
+      if (state.context > floor) {
+        state.context = floor;
+        flash(state, cs.x, cs.y - cs.h / 2 - 16, "AUTO-COMPACT", COL.accent);
+      }
+    }
   }
 }
 
