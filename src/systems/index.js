@@ -1,6 +1,6 @@
 // Orquestador: ejecuta todos los sistemas en orden cada frame.
 import { GAME_TIME, W, COL } from "../config.js";
-import { saveSkills } from "../skills.js";
+import { saveSkills, markTutorialDone } from "../skills.js";
 import { flash, updateFlashes } from "../effects.js";
 import { spawnIfDue, updateTickets } from "./tickets.js";
 import { updateSubagents } from "./subagents.js";
@@ -16,6 +16,7 @@ export function update(state, input, dt) {
     state.learningTimer += dt;
     if (state.learningTimer >= 60) {
       state.learningPhase = false;
+      markTutorialDone();
       flash(state, W / 2, 270, "PACE UP", COL.accent);
     }
   }

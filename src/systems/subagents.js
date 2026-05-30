@@ -1,6 +1,7 @@
 // Máquina de estados de los subagentes (cajas que procesan tickets solos).
-import { SUBAGENT_SPEED, SUBAGENT_PROCESS_MULT, POINTS, COL } from "../config.js";
+import { SUBAGENT_SPEED, SUBAGENT_PROCESS_MULT, POINTS, COL, W } from "../config.js";
 import { flash } from "../effects.js";
+import { markTutorialDone } from "../skills.js";
 
 export function updateSubagents(state, dt) {
   for (const sa of state.subagents) {
@@ -121,6 +122,7 @@ function handleSubagentShip(state, sa) {
   sa.target = null;
   if (state.learningPhase && state.shipped >= 5) {
     state.learningPhase = false;
+    markTutorialDone();
     flash(state, W / 2, 270, "TUTORIAL · DONE — PACE UP", COL.accent);
     state.nextSpawnIn = Math.min(state.nextSpawnIn, 3.0);
   }

@@ -31,6 +31,21 @@ export function resetSkills() {
   } catch (e) {}
 }
 
+// Tutorial: se muestra solo en la primera partida. Se marca al terminarlo.
+const TUTORIAL_KEY = "agentKitchenTutorialDone";
+export function isTutorialDone() {
+  try {
+    return localStorage.getItem(TUTORIAL_KEY) === "1";
+  } catch (e) {
+    return false;
+  }
+}
+export function markTutorialDone() {
+  try {
+    localStorage.setItem(TUTORIAL_KEY, "1");
+  } catch (e) {}
+}
+
 // Efectos derivados de los niveles de skill
 export function speedMultiplier(skills) {
   return 1 + skills.SPEED * 0.1;

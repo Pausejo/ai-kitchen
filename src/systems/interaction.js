@@ -1,6 +1,6 @@
 // Acciones del jugador: pick/drop/ship/compact/subagente + contexto.
 import { CONTEXT_MAX, POINTS, SUBAGENT_DEPLOY_CTX, COMPACT_RATE, COL } from "../config.js";
-import { contextCostMultiplier } from "../skills.js";
+import { contextCostMultiplier, markTutorialDone } from "../skills.js";
 import { nearestStation, playerNearStation } from "../geometry.js";
 import { flash } from "../effects.js";
 import { pickSubagentNextStation } from "./subagents.js";
@@ -120,6 +120,7 @@ export function doInteract(state, p, s) {
     // End tutorial after 5 shipped
     if (state.learningPhase && state.shipped >= 5) {
       state.learningPhase = false;
+      markTutorialDone();
       flash(state, W / 2, 270, "TUTORIAL · DONE — PACE UP", COL.accent);
       state.nextSpawnIn = Math.min(state.nextSpawnIn, 3.0);
     }

@@ -406,6 +406,21 @@
       } catch (e) {}
     }
 
+    // Tutorial: se muestra solo en la primera partida. Se marca al terminarlo.
+    const TUTORIAL_KEY = "agentKitchenTutorialDone";
+    function isTutorialDone() {
+      try {
+        return localStorage.getItem(TUTORIAL_KEY) === "1";
+      } catch (e) {
+        return false;
+      }
+    }
+    function markTutorialDone() {
+      try {
+        localStorage.setItem(TUTORIAL_KEY, "1");
+      } catch (e) {}
+    }
+
     // Efectos derivados de los niveles de skill
     function speedMultiplier(skills) {
       return 1 + skills.SPEED * 0.1;
@@ -574,7 +589,7 @@
         expired: 0,
         perfectFeatures: 0,
         bestScore: parseInt(localStorage.getItem("agentKitchenBest") || "0", 10),
-        learningPhase: numPlayers === 1,
+        learningPhase: numPlayers === 1 && !isTutorialDone(),
         learningTimer: 0,
         learningTicketIdx: 0,
       };
@@ -747,6 +762,7 @@
     // Máquina de estados de los subagentes (cajas que procesan tickets solos).
 
 
+
     function updateSubagents(state, dt) {
       for (const sa of state.subagents) {
         if (sa.state === "idle") {
@@ -866,6 +882,7 @@
       sa.target = null;
       if (state.learningPhase && state.shipped >= 5) {
         state.learningPhase = false;
+        markTutorialDone();
         flash(state, W / 2, 270, "TUTORIAL · DONE — PACE UP", COL.accent);
         state.nextSpawnIn = Math.min(state.nextSpawnIn, 3.0);
       }
@@ -1100,6 +1117,7 @@
         // End tutorial after 5 shipped
         if (state.learningPhase && state.shipped >= 5) {
           state.learningPhase = false;
+          markTutorialDone();
           flash(state, W / 2, 270, "TUTORIAL · DONE — PACE UP", COL.accent);
           state.nextSpawnIn = Math.min(state.nextSpawnIn, 3.0);
         }
@@ -1172,6 +1190,7 @@
         state.learningTimer += dt;
         if (state.learningTimer >= 60) {
           state.learningPhase = false;
+          markTutorialDone();
           flash(state, W / 2, 270, "PACE UP", COL.accent);
         }
       }
@@ -1236,14 +1255,6 @@
         .toLocaleDateString("es-ES", { year: "numeric", month: "long", day: "numeric" })
         .toUpperCase();
       drawText(dateText, W - 40, 50, { font: FONT_MONO, size: 9, color: COL.muted, align: "right", letterSpacing: 1.5 });
-      drawText("PG. 01 / 01", W - 40, 70, {
-        font: FONT_MONO,
-        size: 9,
-        color: COL.muted,
-        align: "right",
-        letterSpacing: 1.5,
-      });
-      drawText("CLAUDE & CO.", W - 40, 90, { font: FONT_SERIF, size: 14, italic: true, color: COL.ink, align: "right" });
 
       // Horizontal rules
       drawLine(40, 130, W - 40, 130, COL.ink, 1.2);
