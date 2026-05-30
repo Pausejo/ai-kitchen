@@ -1,6 +1,6 @@
 // Acciones del jugador: pick/drop/ship/compact/subagente + contexto.
 import { CONTEXT_MAX, POINTS, SUBAGENT_DEPLOY_CTX, COMPACT_RATE, COL } from "../config.js";
-import { contextCostMultiplier, markTutorialDone } from "../skills.js";
+import { contextCostMultiplier } from "../skills.js";
 import { nearestStation, playerNearStation } from "../geometry.js";
 import { flash } from "../effects.js";
 import { pickSubagentNextStation } from "./subagents.js";
@@ -19,6 +19,8 @@ export function updateContext(state, dt) {
   }
   if (draining) {
     state.context = Math.max(0, state.context - COMPACT_RATE * dt);
+    // Lección de COMPACT del tutorial: cuenta solo tras enviar bug+feature
+    if (state.learningPhase && state.shipped >= 2) state.learningCompacted = true;
   }
 }
 
@@ -117,13 +119,7 @@ export function doInteract(state, p, s) {
     flash(state, s.x, s.y - s.h / 2 - 16, "+" + pts, COL.accent);
     p.holding = null;
     state.context = Math.min(CONTEXT_MAX, state.context + 4 * contextCostMultiplier(state.skills));
-    // End tutorial after 5 shipped
-    if (state.learningPhase && state.shipped >= 5) {
-      state.learningPhase = false;
-      markTutorialDone();
-      flash(state, W / 2, 270, "TUTORIAL · DONE — PACE UP", COL.accent);
-      state.nextSpawnIn = Math.min(state.nextSpawnIn, 3.0);
-    }
+    // El fin del tutorial se decide de forma centralizada en systems/index.js
   }
 
   if (s.kind === "compact") {

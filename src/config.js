@@ -143,12 +143,15 @@ export const FEAT_DESCS = [
   "Métricas en tiempo real",
 ];
 
+// Tutorial principal (primera partida): un bug, una feature, y luego compactar.
 export const TUTORIAL_TICKETS = [
-  { type: "BUG", desc: "Botón no clickea", hint: "PICK · PLAN → CODE → PR · +10" },
-  { type: "BUG", desc: "Typo en el footer", hint: "MISMO FLUJO · PRACTICA" },
-  { type: "FEATURE", desc: "Modo oscuro premium", hint: "TDD → 2X BONUS · +25" },
-  { type: "FEATURE", desc: "Login con Google", hint: "OJO AL CONTEXTO · COMPACT LIMPIA" },
-  { type: "BUG", desc: "Layout roto en iPad", hint: "ÚLTIMA FÁCIL · EL RITMO SUBE YA" },
+  { type: "BUG", desc: "Botón no clickea", hint: "BUG: PLAN → CODE → SHIP PR · +10" },
+  { type: "FEATURE", desc: "Modo oscuro premium", hint: "FEATURE: PLAN → TDD (2×) → CODE → PR · +25" },
+];
+
+// Tutorial de subagentes: una sola tarea para aprender a delegar.
+export const SUBAGENT_TUTORIAL_TICKETS = [
+  { type: "BUG", desc: "Favicon roto", hint: "SUÉLTALO EN α1 · TRABAJA SOLO" },
 ];
 
 export function formatTime(s) {

@@ -3,7 +3,7 @@ import { COL, W, H, TAU, FONT_SERIF, FONT_MONO, SKILL_DEFS, PLAYER_CONFIGS } fro
 import { clear, drawText, drawLine, wrapText, ctx } from "../canvas2d.js";
 
 export function drawLearningOverlay(state, hint) {
-  if (!state.learningPhase || !hint) return;
+  if ((!state.learningPhase && !state.subagentLearningPhase) || !hint) return;
   // Editor's note box, positioned in the empty corner top-right of the play area
   const x = W - W / 2 - 170,
     y = H - 130,
@@ -20,7 +20,8 @@ export function drawLearningOverlay(state, hint) {
   ctx.lineWidth = 0.5;
   ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
   // Header
-  drawText("TUTORIAL — " + String(Math.min(state.shipped + 1, 5)).padStart(2, "0") + " / 05", x + 12, y + 18, {
+  const header = state.subagentLearningPhase ? "TUTORIAL · SUBAGENTES" : "TUTORIAL · LO BÁSICO";
+  drawText(header, x + 12, y + 18, {
     font: FONT_MONO,
     size: 8,
     color: COL.accent,

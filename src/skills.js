@@ -46,6 +46,21 @@ export function markTutorialDone() {
   } catch (e) {}
 }
 
+// Tutorial de subagentes: se muestra una vez, al desbloquear el primer subagente.
+const SUBAGENT_TUTORIAL_KEY = "agentKitchenSubagentTutorialDone";
+export function isSubagentTutorialDone() {
+  try {
+    return localStorage.getItem(SUBAGENT_TUTORIAL_KEY) === "1";
+  } catch (e) {
+    return false;
+  }
+}
+export function markSubagentTutorialDone() {
+  try {
+    localStorage.setItem(SUBAGENT_TUTORIAL_KEY, "1");
+  } catch (e) {}
+}
+
 // Efectos derivados de los niveles de skill
 export function speedMultiplier(skills) {
   return 1 + skills.SPEED * 0.1;

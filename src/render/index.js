@@ -4,7 +4,23 @@ import { drawHeader, drawStatsBar, drawPlayArea, drawFooter } from "./hud.js";
 import { drawInboxQueue, drawStation, drawAllSubagents, drawAllPlayers, drawFlashes } from "./entities.js";
 import { drawMenu, drawShop, drawGameOver, drawLearningOverlay } from "./screens.js";
 
+function computeSubagentHint(state) {
+  const holder = state.players.find((p) => p.holding);
+  if (holder) {
+    return { text: "Suéltalo en la caja SUBAGENT (α1): la procesa sola.", stationId: "SUBA_0" };
+  }
+  const busy = state.subagents.some((sa) => sa.state !== "idle");
+  if (busy) {
+    return { text: "El subagente hace PLAN → CODE → PR solo (es más lento). Observa.", stationId: "SUBA_0" };
+  }
+  if (state.inbox.length > 0) {
+    return { text: "Recoge el ticket en INBOX y llévalo a la caja SUBAGENT (α1).", stationId: "INBOX" };
+  }
+  return { text: "Delega: lleva un ticket a la caja SUBAGENT (α1).", stationId: "SUBA_0" };
+}
+
 function computeLearningHint(state) {
+  if (state.subagentLearningPhase) return computeSubagentHint(state);
   if (!state.learningPhase) return null;
   // Priority 1: a player is holding a ticket → guide based on what stages are missing
   const holder = state.players.find((p) => p.holding);
@@ -20,6 +36,10 @@ function computeLearningHint(state) {
       return { text: "Ahora CODE. Implementa el ticket.", stationId: "CODE" };
     }
     return { text: "Listo. Llévalo a SHIP PR para enviarlo.", stationId: "PR" };
+  }
+  // Lección de COMPACT: bug + feature enviados, falta compactar una vez
+  if (state.shipped >= 2 && !state.learningCompacted) {
+    return { text: "Contexto alto. Ve a COMPACT y quédate quieto para vaciarlo.", stationId: "COMPACT" };
   }
   // Priority 2: a station has a ready ticket waiting for pickup
   const ready = state.stations.find((s) => s.kind === "process" && s.queue.length > 0 && s.queue[0].progress >= 1);

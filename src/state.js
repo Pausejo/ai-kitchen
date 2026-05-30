@@ -1,6 +1,12 @@
 // Fábrica del estado del juego. Sin lógica de update.
 import { W, GAME_TIME, PLAYER_CONFIGS, PLAYER_R } from "./config.js";
-import { loadSkills, subagentSlots, processTimeMultiplier, isTutorialDone } from "./skills.js";
+import {
+  loadSkills,
+  subagentSlots,
+  processTimeMultiplier,
+  isTutorialDone,
+  isSubagentTutorialDone,
+} from "./skills.js";
 
 export function createState(numPlayers = 1) {
   const skills = loadSkills();
@@ -88,7 +94,9 @@ export function createState(numPlayers = 1) {
     perfectFeatures: 0,
     bestScore: parseInt(localStorage.getItem("agentKitchenBest") || "0", 10),
     learningPhase: numPlayers === 1 && !isTutorialDone(),
-    learningTimer: 0,
+    subagentLearningPhase: numPlayers === 1 && slots >= 1 && isTutorialDone() && !isSubagentTutorialDone(),
+    learningCompacted: false,
+    subagentShipped: 0,
     learningTicketIdx: 0,
   };
 }

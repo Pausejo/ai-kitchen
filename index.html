@@ -221,12 +221,15 @@
       "Métricas en tiempo real",
     ];
 
+    // Tutorial principal (primera partida): un bug, una feature, y luego compactar.
     const TUTORIAL_TICKETS = [
-      { type: "BUG", desc: "Botón no clickea", hint: "PICK · PLAN → CODE → PR · +10" },
-      { type: "BUG", desc: "Typo en el footer", hint: "MISMO FLUJO · PRACTICA" },
-      { type: "FEATURE", desc: "Modo oscuro premium", hint: "TDD → 2X BONUS · +25" },
-      { type: "FEATURE", desc: "Login con Google", hint: "OJO AL CONTEXTO · COMPACT LIMPIA" },
-      { type: "BUG", desc: "Layout roto en iPad", hint: "ÚLTIMA FÁCIL · EL RITMO SUBE YA" },
+      { type: "BUG", desc: "Botón no clickea", hint: "BUG: PLAN → CODE → SHIP PR · +10" },
+      { type: "FEATURE", desc: "Modo oscuro premium", hint: "FEATURE: PLAN → TDD (2×) → CODE → PR · +25" },
+    ];
+
+    // Tutorial de subagentes: una sola tarea para aprender a delegar.
+    const SUBAGENT_TUTORIAL_TICKETS = [
+      { type: "BUG", desc: "Favicon roto", hint: "SUÉLTALO EN α1 · TRABAJA SOLO" },
     ];
 
     function formatTime(s) {
@@ -421,6 +424,21 @@
       } catch (e) {}
     }
 
+    // Tutorial de subagentes: se muestra una vez, al desbloquear el primer subagente.
+    const SUBAGENT_TUTORIAL_KEY = "agentKitchenSubagentTutorialDone";
+    function isSubagentTutorialDone() {
+      try {
+        return localStorage.getItem(SUBAGENT_TUTORIAL_KEY) === "1";
+      } catch (e) {
+        return false;
+      }
+    }
+    function markSubagentTutorialDone() {
+      try {
+        localStorage.setItem(SUBAGENT_TUTORIAL_KEY, "1");
+      } catch (e) {}
+    }
+
     // Efectos derivados de los niveles de skill
     function speedMultiplier(skills) {
       return 1 + skills.SPEED * 0.1;
@@ -590,7 +608,9 @@
         perfectFeatures: 0,
         bestScore: parseInt(localStorage.getItem("agentKitchenBest") || "0", 10),
         learningPhase: numPlayers === 1 && !isTutorialDone(),
-        learningTimer: 0,
+        subagentLearningPhase: numPlayers === 1 && slots >= 1 && isTutorialDone() && !isSubagentTutorialDone(),
+        learningCompacted: false,
+        subagentShipped: 0,
         learningTicketIdx: 0,
       };
     }
@@ -663,20 +683,27 @@
     // Tickets: creación, spawn temporizado y expiración.
 
 
+    function scriptedTicket(state, scripted) {
+      const lifetime = 90;
+      return {
+        id: state.nextTicketId++,
+        type: scripted.type,
+        desc: scripted.desc,
+        hint: scripted.hint,
+        stages: new Set(),
+        timeLeft: lifetime,
+        maxTime: lifetime,
+      };
+    }
+
     function makeTicket(state) {
-      // Tutorial-scripted ticket
+      // Tutorial principal: tickets guiados (bug, feature)
       if (state.learningPhase && state.learningTicketIdx < TUTORIAL_TICKETS.length) {
-        const scripted = TUTORIAL_TICKETS[state.learningTicketIdx++];
-        const lifetime = 90;
-        return {
-          id: state.nextTicketId++,
-          type: scripted.type,
-          desc: scripted.desc,
-          hint: scripted.hint,
-          stages: new Set(),
-          timeLeft: lifetime,
-          maxTime: lifetime,
-        };
+        return scriptedTicket(state, TUTORIAL_TICKETS[state.learningTicketIdx++]);
+      }
+      // Tutorial de subagentes: una tarea guiada
+      if (state.subagentLearningPhase && state.learningTicketIdx < SUBAGENT_TUTORIAL_TICKETS.length) {
+        return scriptedTicket(state, SUBAGENT_TUTORIAL_TICKETS[state.learningTicketIdx++]);
       }
       // Normal random ticket
       const isFeature = Math.random() < 0.55;
@@ -697,18 +724,23 @@
     function spawnIfDue(state, dt) {
       state.nextSpawnIn -= dt;
       if (state.nextSpawnIn <= 0) {
-        // During learning, cap concurrent tickets
-        if (state.learningPhase) {
+        // Tutoriales: una tarea cada vez, y solo mientras queden tickets guiados
+        if (state.learningPhase || state.subagentLearningPhase) {
+          const scriptedList = state.learningPhase ? TUTORIAL_TICKETS : SUBAGENT_TUTORIAL_TICKETS;
+          if (state.learningTicketIdx >= scriptedList.length) {
+            state.nextSpawnIn = 1.0; // ya servimos todos; espera a que el jugador acabe
+            return;
+          }
           const inFlight =
             state.inbox.length +
             state.players.filter((p) => p.holding).length +
             state.stations.filter((s) => s.kind === "process").reduce((sum, s) => sum + s.queue.length, 0);
-          if (inFlight >= 2) {
+          if (inFlight >= 1) {
             state.nextSpawnIn = 1.0;
             return;
           }
           state.inbox.push(makeTicket(state));
-          state.nextSpawnIn = 8.0;
+          state.nextSpawnIn = 6.0;
           return;
         }
         // Normal: ramp up with game progress
@@ -760,7 +792,6 @@
 
     // ── src/systems/subagents.js ──
     // Máquina de estados de los subagentes (cajas que procesan tickets solos).
-
 
 
     function updateSubagents(state, dt) {
@@ -876,16 +907,11 @@
       } else pts = POINTS.FEATURE_NOTDD;
       state.score += pts;
       state.shipped++;
+      state.subagentShipped = (state.subagentShipped || 0) + 1;
       flash(state, sa.target.x, sa.target.y - sa.target.h / 2 - 16, "+" + pts + " [α]", COL.accent);
       sa.ticket = null;
       sa.state = "returning";
       sa.target = null;
-      if (state.learningPhase && state.shipped >= 5) {
-        state.learningPhase = false;
-        markTutorialDone();
-        flash(state, W / 2, 270, "TUTORIAL · DONE — PACE UP", COL.accent);
-        state.nextSpawnIn = Math.min(state.nextSpawnIn, 3.0);
-      }
     }
 
     function pickSubagentNextStation(state, sa) {
@@ -1016,6 +1042,8 @@
       }
       if (draining) {
         state.context = Math.max(0, state.context - COMPACT_RATE * dt);
+        // Lección de COMPACT del tutorial: cuenta solo tras enviar bug+feature
+        if (state.learningPhase && state.shipped >= 2) state.learningCompacted = true;
       }
     }
 
@@ -1114,13 +1142,7 @@
         flash(state, s.x, s.y - s.h / 2 - 16, "+" + pts, COL.accent);
         p.holding = null;
         state.context = Math.min(CONTEXT_MAX, state.context + 4 * contextCostMultiplier(state.skills));
-        // End tutorial after 5 shipped
-        if (state.learningPhase && state.shipped >= 5) {
-          state.learningPhase = false;
-          markTutorialDone();
-          flash(state, W / 2, 270, "TUTORIAL · DONE — PACE UP", COL.accent);
-          state.nextSpawnIn = Math.min(state.nextSpawnIn, 3.0);
-        }
+        // El fin del tutorial se decide de forma centralizada en systems/index.js
       }
 
       if (s.kind === "compact") {
@@ -1185,15 +1207,6 @@
     function update(state, input, dt) {
       state.elapsed += dt;
       state.timeLeft = Math.max(0, GAME_TIME - state.elapsed);
-      // Learning phase auto-end after 60s
-      if (state.learningPhase) {
-        state.learningTimer += dt;
-        if (state.learningTimer >= 60) {
-          state.learningPhase = false;
-          markTutorialDone();
-          flash(state, W / 2, 270, "PACE UP", COL.accent);
-        }
-      }
       updatePlayers(state, input, dt);
       updateSubagents(state, dt);
       spawnIfDue(state, dt);
@@ -1203,8 +1216,27 @@
       handleInteract(state);
       handleTrash(state);
       updateFlashes(state, dt);
+
+      // Fin del tutorial principal: bug + feature enviados y ha compactado una vez.
+      if (state.learningPhase && state.shipped >= 2 && state.learningCompacted) {
+        state.learningPhase = false;
+        markTutorialDone();
+        flash(state, W / 2, 270, "TUTORIAL · COMPLETO — ¡A POR ELLO!", COL.accent);
+        state.nextSpawnIn = Math.min(state.nextSpawnIn, 2.0);
+      }
+      // Fin del tutorial de subagentes: un subagente ha enviado una PR.
+      if (state.subagentLearningPhase && state.subagentShipped >= 1) {
+        state.subagentLearningPhase = false;
+        markSubagentTutorialDone();
+        flash(state, W / 2, 270, "SUBAGENTES · LISTO", COL.accent);
+        state.nextSpawnIn = Math.min(state.nextSpawnIn, 2.0);
+      }
+
       if (state.timeLeft <= 0) {
         if (state.phase === "playing") {
+          // Cierra los tutoriales aunque no se completaran: se muestran solo 1 vez.
+          if (state.learningPhase) markTutorialDone();
+          if (state.subagentLearningPhase) markSubagentTutorialDone();
           // Transition to gameover: award hours and persist
           const earnedHours = Math.max(0, state.score);
           state.earnedHours = earnedHours;
@@ -2095,7 +2127,7 @@
 
 
     function drawLearningOverlay(state, hint) {
-      if (!state.learningPhase || !hint) return;
+      if ((!state.learningPhase && !state.subagentLearningPhase) || !hint) return;
       // Editor's note box, positioned in the empty corner top-right of the play area
       const x = W - W / 2 - 170,
         y = H - 130,
@@ -2112,7 +2144,8 @@
       ctx.lineWidth = 0.5;
       ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
       // Header
-      drawText("TUTORIAL — " + String(Math.min(state.shipped + 1, 5)).padStart(2, "0") + " / 05", x + 12, y + 18, {
+      const header = state.subagentLearningPhase ? "TUTORIAL · SUBAGENTES" : "TUTORIAL · LO BÁSICO";
+      drawText(header, x + 12, y + 18, {
         font: FONT_MONO,
         size: 8,
         color: COL.accent,
@@ -2770,7 +2803,23 @@
 
 
 
+    function computeSubagentHint(state) {
+      const holder = state.players.find((p) => p.holding);
+      if (holder) {
+        return { text: "Suéltalo en la caja SUBAGENT (α1): la procesa sola.", stationId: "SUBA_0" };
+      }
+      const busy = state.subagents.some((sa) => sa.state !== "idle");
+      if (busy) {
+        return { text: "El subagente hace PLAN → CODE → PR solo (es más lento). Observa.", stationId: "SUBA_0" };
+      }
+      if (state.inbox.length > 0) {
+        return { text: "Recoge el ticket en INBOX y llévalo a la caja SUBAGENT (α1).", stationId: "INBOX" };
+      }
+      return { text: "Delega: lleva un ticket a la caja SUBAGENT (α1).", stationId: "SUBA_0" };
+    }
+
     function computeLearningHint(state) {
+      if (state.subagentLearningPhase) return computeSubagentHint(state);
       if (!state.learningPhase) return null;
       // Priority 1: a player is holding a ticket → guide based on what stages are missing
       const holder = state.players.find((p) => p.holding);
@@ -2786,6 +2835,10 @@
           return { text: "Ahora CODE. Implementa el ticket.", stationId: "CODE" };
         }
         return { text: "Listo. Llévalo a SHIP PR para enviarlo.", stationId: "PR" };
+      }
+      // Lección de COMPACT: bug + feature enviados, falta compactar una vez
+      if (state.shipped >= 2 && !state.learningCompacted) {
+        return { text: "Contexto alto. Ve a COMPACT y quédate quieto para vaciarlo.", stationId: "COMPACT" };
       }
       // Priority 2: a station has a ready ticket waiting for pickup
       const ready = state.stations.find((s) => s.kind === "process" && s.queue.length > 0 && s.queue[0].progress >= 1);

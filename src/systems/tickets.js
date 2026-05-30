@@ -9,24 +9,32 @@ import {
   BUG_DESCS,
   FEAT_DESCS,
   TUTORIAL_TICKETS,
+  SUBAGENT_TUTORIAL_TICKETS,
   COL,
 } from "../config.js";
 import { flash } from "../effects.js";
 
+function scriptedTicket(state, scripted) {
+  const lifetime = 90;
+  return {
+    id: state.nextTicketId++,
+    type: scripted.type,
+    desc: scripted.desc,
+    hint: scripted.hint,
+    stages: new Set(),
+    timeLeft: lifetime,
+    maxTime: lifetime,
+  };
+}
+
 export function makeTicket(state) {
-  // Tutorial-scripted ticket
+  // Tutorial principal: tickets guiados (bug, feature)
   if (state.learningPhase && state.learningTicketIdx < TUTORIAL_TICKETS.length) {
-    const scripted = TUTORIAL_TICKETS[state.learningTicketIdx++];
-    const lifetime = 90;
-    return {
-      id: state.nextTicketId++,
-      type: scripted.type,
-      desc: scripted.desc,
-      hint: scripted.hint,
-      stages: new Set(),
-      timeLeft: lifetime,
-      maxTime: lifetime,
-    };
+    return scriptedTicket(state, TUTORIAL_TICKETS[state.learningTicketIdx++]);
+  }
+  // Tutorial de subagentes: una tarea guiada
+  if (state.subagentLearningPhase && state.learningTicketIdx < SUBAGENT_TUTORIAL_TICKETS.length) {
+    return scriptedTicket(state, SUBAGENT_TUTORIAL_TICKETS[state.learningTicketIdx++]);
   }
   // Normal random ticket
   const isFeature = Math.random() < 0.55;
@@ -47,18 +55,23 @@ export function makeTicket(state) {
 export function spawnIfDue(state, dt) {
   state.nextSpawnIn -= dt;
   if (state.nextSpawnIn <= 0) {
-    // During learning, cap concurrent tickets
-    if (state.learningPhase) {
+    // Tutoriales: una tarea cada vez, y solo mientras queden tickets guiados
+    if (state.learningPhase || state.subagentLearningPhase) {
+      const scriptedList = state.learningPhase ? TUTORIAL_TICKETS : SUBAGENT_TUTORIAL_TICKETS;
+      if (state.learningTicketIdx >= scriptedList.length) {
+        state.nextSpawnIn = 1.0; // ya servimos todos; espera a que el jugador acabe
+        return;
+      }
       const inFlight =
         state.inbox.length +
         state.players.filter((p) => p.holding).length +
         state.stations.filter((s) => s.kind === "process").reduce((sum, s) => sum + s.queue.length, 0);
-      if (inFlight >= 2) {
+      if (inFlight >= 1) {
         state.nextSpawnIn = 1.0;
         return;
       }
       state.inbox.push(makeTicket(state));
-      state.nextSpawnIn = 8.0;
+      state.nextSpawnIn = 6.0;
       return;
     }
     // Normal: ramp up with game progress
