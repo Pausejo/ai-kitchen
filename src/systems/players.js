@@ -1,7 +1,7 @@
 // Movimiento de jugadores, colisiones y trail.
-import { W, PLAYER_SPEED } from '../config.js';
-import { speedMultiplier } from '../skills.js';
-import { getInputDirFor } from '../input.js';
+import { W, PLAYER_SPEED } from "../config.js";
+import { speedMultiplier } from "../skills.js";
+import { getInputDirFor } from "../input.js";
 
 export function updatePlayers(state, input, dt) {
   const speedMult = speedMultiplier(state.skills);
@@ -22,18 +22,21 @@ export function updatePlayers(state, input, dt) {
     }
     // Clamp to play area
     const padX = 30;
-    const playTop = 230, playBot = 720;
+    const playTop = 230,
+      playBot = 720;
     p.x = Math.max(padX, Math.min(W - padX, p.x));
     p.y = Math.max(playTop + 30, Math.min(playBot - 30, p.y));
     // Resolve station collisions (push-out)
     for (const s of state.stations) {
-      const left = s.x - s.w/2, right = s.x + s.w/2;
-      const top = s.y - s.h/2, bot = s.y + s.h/2;
+      const left = s.x - s.w / 2,
+        right = s.x + s.w / 2;
+      const top = s.y - s.h / 2,
+        bot = s.y + s.h / 2;
       const closestX = Math.max(left, Math.min(p.x, right));
       const closestY = Math.max(top, Math.min(p.y, bot));
       const dx = p.x - closestX;
       const dy = p.y - closestY;
-      const d2 = dx*dx + dy*dy;
+      const d2 = dx * dx + dy * dy;
       if (d2 < p.r * p.r) {
         const d = Math.sqrt(d2) || 0.001;
         const push = p.r - d;
@@ -48,16 +51,21 @@ export function updatePlayers(state, input, dt) {
   }
   // Player-vs-player collision (push apart)
   if (state.players.length === 2) {
-    const a = state.players[0], b = state.players[1];
-    const dx = b.x - a.x, dy = b.y - a.y;
-    const d2 = dx*dx + dy*dy;
+    const a = state.players[0],
+      b = state.players[1];
+    const dx = b.x - a.x,
+      dy = b.y - a.y;
+    const d2 = dx * dx + dy * dy;
     const minD = a.r + b.r;
     if (d2 < minD * minD && d2 > 0.0001) {
       const d = Math.sqrt(d2);
       const push = (minD - d) / 2;
-      const nx = dx / d, ny = dy / d;
-      a.x -= nx * push; a.y -= ny * push;
-      b.x += nx * push; b.y += ny * push;
+      const nx = dx / d,
+        ny = dy / d;
+      a.x -= nx * push;
+      a.y -= ny * push;
+      b.x += nx * push;
+      b.y += ny * push;
     }
   }
 }
