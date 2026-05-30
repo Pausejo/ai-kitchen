@@ -1,35 +1,51 @@
 // Tickets: creación, spawn temporizado y expiración.
 import {
-  POINTS, SPAWN_BASE, SPAWN_MIN, GAME_TIME,
-  TICKET_LIFETIME_BUG, TICKET_LIFETIME_FEAT, BUG_DESCS, FEAT_DESCS,
-  TUTORIAL_TICKETS, COL,
-} from '../config.js';
-import { flash } from '../effects.js';
+  POINTS,
+  SPAWN_BASE,
+  SPAWN_MIN,
+  GAME_TIME,
+  TICKET_LIFETIME_BUG,
+  TICKET_LIFETIME_FEAT,
+  BUG_DESCS,
+  FEAT_DESCS,
+  TUTORIAL_TICKETS,
+  SUBAGENT_TUTORIAL_TICKETS,
+  COL,
+} from "../config.js";
+import { flash } from "../effects.js";
+
+function scriptedTicket(state, scripted) {
+  const lifetime = 90;
+  return {
+    id: state.nextTicketId++,
+    type: scripted.type,
+    desc: scripted.desc,
+    hint: scripted.hint,
+    stages: new Set(),
+    timeLeft: lifetime,
+    maxTime: lifetime,
+  };
+}
 
 export function makeTicket(state) {
-  // Tutorial-scripted ticket
+  // Tutorial principal: tickets guiados (bug, feature)
   if (state.learningPhase && state.learningTicketIdx < TUTORIAL_TICKETS.length) {
-    const scripted = TUTORIAL_TICKETS[state.learningTicketIdx++];
-    const lifetime = 90;
-    return {
-      id: state.nextTicketId++,
-      type: scripted.type,
-      desc: scripted.desc,
-      hint: scripted.hint,
-      stages: new Set(),
-      timeLeft: lifetime,
-      maxTime: lifetime,
-    };
+    return scriptedTicket(state, TUTORIAL_TICKETS[state.learningTicketIdx++]);
+  }
+  // Tutorial de subagentes: una tarea guiada
+  if (state.subagentLearningPhase && state.learningTicketIdx < SUBAGENT_TUTORIAL_TICKETS.length) {
+    return scriptedTicket(state, SUBAGENT_TUTORIAL_TICKETS[state.learningTicketIdx++]);
   }
   // Normal random ticket
   const isFeature = Math.random() < 0.55;
-  const type = isFeature ? 'FEATURE' : 'BUG';
+  const type = isFeature ? "FEATURE" : "BUG";
   const arr = isFeature ? FEAT_DESCS : BUG_DESCS;
   const desc = arr[Math.floor(Math.random() * arr.length)];
   const lifetime = isFeature ? TICKET_LIFETIME_FEAT : TICKET_LIFETIME_BUG;
   return {
     id: state.nextTicketId++,
-    type, desc,
+    type,
+    desc,
     stages: new Set(),
     timeLeft: lifetime,
     maxTime: lifetime,
@@ -39,19 +55,23 @@ export function makeTicket(state) {
 export function spawnIfDue(state, dt) {
   state.nextSpawnIn -= dt;
   if (state.nextSpawnIn <= 0) {
-    // During learning, cap concurrent tickets
-    if (state.learningPhase) {
-      const inFlight = state.inbox.length +
-        state.players.filter(p => p.holding).length +
-        state.stations
-          .filter(s => s.kind === 'process')
-          .reduce((sum, s) => sum + s.queue.length, 0);
-      if (inFlight >= 2) {
+    // Tutoriales: una tarea cada vez, y solo mientras queden tickets guiados
+    if (state.learningPhase || state.subagentLearningPhase) {
+      const scriptedList = state.learningPhase ? TUTORIAL_TICKETS : SUBAGENT_TUTORIAL_TICKETS;
+      if (state.learningTicketIdx >= scriptedList.length) {
+        state.nextSpawnIn = 1.0; // ya servimos todos; espera a que el jugador acabe
+        return;
+      }
+      const inFlight =
+        state.inbox.length +
+        state.players.filter((p) => p.holding).length +
+        state.stations.filter((s) => s.kind === "process").reduce((sum, s) => sum + s.queue.length, 0);
+      if (inFlight >= 1) {
         state.nextSpawnIn = 1.0;
         return;
       }
       state.inbox.push(makeTicket(state));
-      state.nextSpawnIn = 8.0;
+      state.nextSpawnIn = 6.0;
       return;
     }
     // Normal: ramp up with game progress
@@ -69,7 +89,7 @@ export function updateTickets(state, dt) {
     if (state.inbox[i].timeLeft <= 0) {
       state.score += POINTS.EXPIRED;
       state.expired++;
-      flash(state, state.stations.find(s => s.id === 'INBOX').x, 280, 'EXPIRED', COL.red);
+      flash(state, state.stations.find((s) => s.id === "INBOX").x, 280, "EXPIRED", COL.red);
       state.inbox.splice(i, 1);
     }
   }
@@ -80,21 +100,21 @@ export function updateTickets(state, dt) {
       if (p.holding.timeLeft <= 0) {
         state.score += POINTS.EXPIRED;
         state.expired++;
-        flash(state, p.x, p.y - 30, 'EXPIRED', COL.red);
+        flash(state, p.x, p.y - 30, "EXPIRED", COL.red);
         p.holding = null;
       }
     }
   }
   // Tickets in station queues also count down (every ticket, not just the front)
   for (const s of state.stations) {
-    if (s.kind !== 'process') continue;
+    if (s.kind !== "process") continue;
     for (let i = s.queue.length - 1; i >= 0; i--) {
       const entry = s.queue[i];
       entry.ticket.timeLeft -= dt;
       if (entry.ticket.timeLeft <= 0) {
         state.score += POINTS.EXPIRED;
         state.expired++;
-        flash(state, s.x, s.y - s.h/2 - 16, 'EXPIRED', COL.red);
+        flash(state, s.x, s.y - s.h / 2 - 16, "EXPIRED", COL.red);
         s.queue.splice(i, 1);
       }
     }

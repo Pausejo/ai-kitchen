@@ -1,8 +1,8 @@
 // Primitivos de dibujo 2D y el contexto del canvas (singleton del DOM).
-import { COL, W, H, FONT_MONO, FONT_SERIF } from './config.js';
+import { COL, W, H, FONT_MONO, FONT_SERIF } from "./config.js";
 
-export const canvas = document.getElementById('game');
-export const ctx = canvas.getContext('2d');
+export const canvas = document.getElementById("game");
+export const ctx = canvas.getContext("2d");
 
 export function clear() {
   ctx.fillStyle = COL.paper;
@@ -23,8 +23,8 @@ export function drawText(text, x, y, opts = {}) {
     size = 12,
     weight = 400,
     color = COL.ink,
-    align = 'left',
-    baseline = 'alphabetic',
+    align = "left",
+    baseline = "alphabetic",
     italic = false,
     letterSpacing = 0,
     tracking = 0,
@@ -32,13 +32,13 @@ export function drawText(text, x, y, opts = {}) {
   ctx.fillStyle = color;
   ctx.textAlign = align;
   ctx.textBaseline = baseline;
-  ctx.font = `${italic ? 'italic ' : ''}${weight} ${size}px ${font}, serif`;
+  ctx.font = `${italic ? "italic " : ""}${weight} ${size}px ${font}, serif`;
   if (letterSpacing) {
     // Manual letter spacing
-    const chars = text.split('');
-    const w = chars.map(c => ctx.measureText(c).width);
+    const chars = text.split("");
+    const w = chars.map((c) => ctx.measureText(c).width);
     const total = w.reduce((a, b) => a + b, 0) + (chars.length - 1) * letterSpacing;
-    let cx = align === 'center' ? x - total / 2 : (align === 'right' ? x - total : x);
+    let cx = align === "center" ? x - total / 2 : align === "right" ? x - total : x;
     for (let i = 0; i < chars.length; i++) {
       ctx.fillText(chars[i], cx, y);
       cx += w[i] + letterSpacing;
@@ -59,17 +59,24 @@ export function drawLine(x1, y1, x2, y2, color = COL.ink, w = 1) {
 
 export function drawRect(x, y, w, h, opts = {}) {
   const { fill, stroke, lw = 1 } = opts;
-  if (fill) { ctx.fillStyle = fill; ctx.fillRect(x, y, w, h); }
-  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw; ctx.strokeRect(x, y, w, h); }
+  if (fill) {
+    ctx.fillStyle = fill;
+    ctx.fillRect(x, y, w, h);
+  }
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = lw;
+    ctx.strokeRect(x, y, w, h);
+  }
 }
 
 export function wrapText(text, x, y, maxW, lh, opts) {
-  ctx.font = `${opts.italic ? 'italic ' : ''}${opts.weight || 400} ${opts.size}px ${opts.font || FONT_SERIF}, serif`;
-  const words = text.split(' ');
+  ctx.font = `${opts.italic ? "italic " : ""}${opts.weight || 400} ${opts.size}px ${opts.font || FONT_SERIF}, serif`;
+  const words = text.split(" ");
   const lines = [];
-  let cur = '';
+  let cur = "";
   for (const w of words) {
-    const test = cur ? cur + ' ' + w : w;
+    const test = cur ? cur + " " + w : w;
     if (ctx.measureText(test).width > maxW && cur) {
       lines.push(cur);
       cur = w;
