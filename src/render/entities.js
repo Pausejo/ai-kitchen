@@ -211,12 +211,19 @@ export function drawStation(state, s, spotlighted) {
     color: COL.muted,
     letterSpacing: 1.5,
   });
-  // Label center
+  // Label center — auto-ajusta el tamaño para que quepa en el ancho de la caja
   let labelColor = isPR ? COL.accent : COL.ink;
   if (pressure === 2) labelColor = COL.red;
+  let labelSize = 22;
+  const maxLabelW = s.w - 24;
+  ctx.font = `italic 900 ${labelSize}px ${FONT_SERIF}, serif`;
+  while (labelSize > 11 && ctx.measureText(s.label).width > maxLabelW) {
+    labelSize -= 1;
+    ctx.font = `italic 900 ${labelSize}px ${FONT_SERIF}, serif`;
+  }
   drawText(s.label, s.x, top + 50, {
     font: FONT_SERIF,
-    size: isPR ? 22 : 22,
+    size: labelSize,
     weight: 900,
     italic: true,
     color: labelColor,
