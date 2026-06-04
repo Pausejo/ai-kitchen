@@ -20,9 +20,14 @@ const ORDER = [
   "src/systems/interaction.js",
   "src/systems/index.js",
   "src/render/hud.js",
-  "src/render/entities.js",
   "src/render/screens.js",
-  "src/render/index.js",
+  "src/render3d/project.js",
+  "src/render3d/labels.js",
+  "src/render3d/models.js",
+  "src/render3d/scene.js",
+  "src/render3d/sync.js",
+  "src/render3d/overlay.js",
+  "src/render3d/index.js",
   "src/main.js",
 ];
 
@@ -48,16 +53,25 @@ if (dupes.length) {
 }
 
 const shell = readFileSync("src/shell.html", "utf8");
+// three.js va en su propio <script> FUERA del IIFE del juego: define el global
+// THREE sin pasar por strip() ni por el chequeo de duplicados.
+const three = readFileSync("vendor/three.min.js", "utf8");
+const threeTag = `<script>\n${three.trim()}\n    </script>`;
 const scriptTag = `<script>\n      (function () {\n        'use strict';\n\n${code}\n\n      })();\n    </script>`;
 const html =
   "<!-- GENERADO por build.mjs — NO editar a mano; edita src/ y re-ejecuta `node build.mjs` -->\n" +
-  shell.replace(
-    "    __SCRIPT__",
-    scriptTag
-      .split("\n")
-      .map((l) => (l ? "    " + l : l))
-      .join("\n"),
-  );
+  shell
+    .replace("    __THREE__", "    " + threeTag)
+    .replace(
+      "    __SCRIPT__",
+      scriptTag
+        .split("\n")
+        .map((l) => (l ? "    " + l : l))
+        .join("\n"),
+    );
 
 writeFileSync("index.html", html);
-console.log(`index.html generado: ${ORDER.length} módulos, ${code.length} bytes de JS.`);
+console.log(
+  `index.html generado: ${ORDER.length} módulos, ${code.length} bytes de JS del juego, ` +
+    `${(html.length / 1024).toFixed(0)} KB en total (incluye three.js r147 inline).`,
+);

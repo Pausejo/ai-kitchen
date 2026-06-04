@@ -1,36 +1,37 @@
-// Pantallas completas: overlay de tutorial, menú, shop, game over.
-import { COL, W, H, TAU, FONT_SERIF, FONT_MONO, SKILL_DEFS, PLAYER_CONFIGS } from "../config.js";
-import { clear, drawText, drawLine, wrapText, ctx } from "../canvas2d.js";
+// Pantallas completas estilo cartoon sobre la cocina 3D (lavado translúcido):
+// overlay de tutorial, menú, shop y game over.
+import { W, H, TAU, FONT_SERIF, FONT_MONO, SKILL_DEFS, PLAYER_CONFIGS } from "../config.js";
+import { drawText, drawPanel, drawLine, wrapText, ctx, UI } from "../canvas2d.js";
+import { drawKeycap } from "./hud.js";
+
+
+// Lavado cálido translúcido: deja ver la cocina 3D de fondo.
+function wash(alpha = 0.88) {
+  ctx.save();
+  ctx.fillStyle = `rgba(252, 242, 222, ${alpha})`;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
 
 export function drawLearningOverlay(state, hint) {
   if ((!state.learningPhase && !state.subagentLearningPhase) || !hint) return;
-  // Editor's note box, positioned in the empty corner top-right of the play area
-  const x = W - W / 2 - 170,
-    y = H - 130,
-    w = 340,
-    h = 60;
-  // Background
-  ctx.fillStyle = COL.paper3;
-  ctx.fillRect(x, y, w, h);
-  ctx.strokeStyle = COL.ink;
-  ctx.lineWidth = 1;
-  ctx.strokeRect(x, y, w, h);
-  // Inner rule
-  ctx.strokeStyle = COL.line;
-  ctx.lineWidth = 0.5;
-  ctx.strokeRect(x + 4, y + 4, w - 8, h - 8);
-  // Header
+  // Bocadillo de tutorial en la zona inferior central
+  const w = 380,
+    h = 64;
+  const x = W / 2 - w / 2,
+    y = H - 136;
+  drawPanel(x, y, w, h, { r: 16, fill: UI.cream, stroke: UI.accent, lw: 2.5, shadow: 3 });
   const header = state.subagentLearningPhase ? "TUTORIAL · SUBAGENTES" : "TUTORIAL · LO BÁSICO";
-  drawText(header, x + 12, y + 18, {
+  drawText(header, x + 16, y + 19, {
     font: FONT_MONO,
     size: 8,
-    color: COL.accent,
+    color: UI.accent,
     letterSpacing: 1.8,
     weight: 700,
   });
-  // Hint text — wrap if needed
+  // Texto del hint con wrap
   ctx.font = `italic 600 14px ${FONT_SERIF}, serif`;
-  const maxW = w - 24;
+  const maxW = w - 32;
   const words = hint.text.split(" ");
   const lines = [];
   let cur = "";
@@ -43,63 +44,58 @@ export function drawLearningOverlay(state, hint) {
   }
   if (cur) lines.push(cur);
   for (let i = 0; i < lines.length; i++) {
-    drawText(lines[i], x + 12, y + 36 + i * 16, {
+    drawText(lines[i], x + 16, y + 38 + i * 17, {
       font: FONT_SERIF,
       size: 13,
       italic: true,
       weight: 600,
-      color: COL.ink,
+      color: UI.ink,
     });
   }
 }
 
 export function drawMenu(state) {
-  clear();
+  wash(0.84);
   ctx.save();
-  drawLine(80, 90, W - 80, 90, COL.ink, 1.2);
-  drawLine(80, 94, W - 80, 94, COL.ink, 0.4);
 
   drawText("UN JUEGO DE PABLO AUSEJO", W - 100, 80, {
     font: FONT_MONO,
     size: 10,
     weight: 500,
-    color: COL.muted,
+    color: UI.muted,
     letterSpacing: 2,
     align: "right",
   });
 
-  // Massive title
+  // Título gigante
   drawText("AI", W / 2, 230, {
     font: FONT_SERIF,
     size: 160,
     weight: 900,
     italic: true,
     align: "center",
-    color: COL.ink,
+    color: UI.ink,
   });
   drawText("KITCHEN", W / 2, 350, {
     font: FONT_SERIF,
     size: 160,
     weight: 900,
     align: "center",
-    color: COL.accent,
+    color: UI.accent,
   });
-
   drawText("— CLAUDE CODE x OVERCOOKED —", W / 2, 385, {
     font: FONT_MONO,
     size: 11,
-    color: COL.muted,
+    color: UI.muted,
     align: "center",
     letterSpacing: 3,
   });
 
-  drawLine(150, 425, W - 150, 425, COL.ink, 0.5);
-
-  // Mode selector
-  drawText("§ MODO", W / 2, 455, {
+  // Selector de modo: dos botones-pill grandes
+  drawText("§ MODO", W / 2, 448, {
     font: FONT_MONO,
     size: 10,
-    color: COL.muted,
+    color: UI.muted,
     letterSpacing: 2,
     weight: 700,
     align: "center",
@@ -110,53 +106,42 @@ export function drawMenu(state) {
   ];
   for (const m of modes) {
     const selected = state.menuPlayers === m.n;
-    const y = 500;
+    const y = 470;
     if (selected) {
-      ctx.fillStyle = COL.ink;
-      ctx.fillRect(m.x - 130, y - 30, 260, 50);
-      drawText("[ " + m.label + " ]", m.x, y + 5, {
+      drawPanel(m.x - 135, y, 270, 56, { r: 18, fill: UI.accent, stroke: UI.ink, lw: 2.5, shadow: 4 });
+      drawText(m.label, m.x, y + 36, {
         font: FONT_SERIF,
         size: 22,
         weight: 900,
         italic: true,
-        color: COL.paper,
+        color: UI.cream,
         align: "center",
         letterSpacing: 1,
       });
-      drawText("PULSA " + m.n, m.x, y + 32, {
-        font: FONT_MONO,
-        size: 9,
-        color: COL.accent,
-        align: "center",
-        letterSpacing: 2,
-      });
     } else {
-      ctx.strokeStyle = COL.line;
-      ctx.lineWidth = 1;
-      ctx.strokeRect(m.x - 130, y - 30, 260, 50);
-      drawText(m.label, m.x, y + 5, {
+      drawPanel(m.x - 135, y, 270, 56, { r: 18, fill: UI.cream, stroke: UI.muted, lw: 1.5 });
+      drawText(m.label, m.x, y + 36, {
         font: FONT_SERIF,
         size: 22,
         weight: 400,
         italic: true,
-        color: COL.muted,
+        color: UI.muted,
         align: "center",
         letterSpacing: 1,
       });
-      drawText("PULSA " + m.n, m.x, y + 32, {
-        font: FONT_MONO,
-        size: 9,
-        color: COL.muted,
-        align: "center",
-        letterSpacing: 2,
-      });
     }
+    drawText("PULSA " + m.n, m.x, y + 74, {
+      font: FONT_MONO,
+      size: 9,
+      color: selected ? UI.accent : UI.muted,
+      align: "center",
+      letterSpacing: 2,
+      weight: selected ? 700 : 400,
+    });
   }
 
-  drawLine(150, 565, W - 150, 565, COL.ink, 0.5);
-
-  // Controls — two columns
-  drawText("§ CONTROLES — J1", 150, 600, {
+  // Controles con keycaps — J1 (y J2 si procede) o puntos
+  drawText("§ CONTROLES — J1", 170, 610, {
     font: FONT_MONO,
     size: 10,
     color: PLAYER_CONFIGS[0].color,
@@ -164,28 +149,18 @@ export function drawMenu(state) {
     weight: 700,
   });
   const c1 = [
-    ["WASD", "mover"],
-    ["F", "interactuar / coger / dejar"],
-    ["Q", "descartar ticket (-8 pts)"],
+    [["W", "A", "S", "D"], "mover"],
+    [["F"], "interactuar / coger / dejar"],
+    [["Q"], "descartar ticket (-8 pts)"],
   ];
   for (let i = 0; i < c1.length; i++) {
-    drawText(c1[i][0], 150, 630 + i * 22, {
-      font: FONT_MONO,
-      size: 13,
-      weight: 700,
-      color: COL.ink,
-      letterSpacing: 1,
-    });
-    drawText(c1[i][1], 250, 630 + i * 22, {
-      font: FONT_SERIF,
-      size: 14,
-      italic: true,
-      color: COL.muted,
-    });
+    let kx = 170;
+    for (const k of c1[i][0]) kx += drawKeycap(kx, 624 + i * 32, k, UI.ink) + 4;
+    drawText(c1[i][1], 300, 641 + i * 32, { font: FONT_SERIF, size: 14, italic: true, color: UI.muted });
   }
 
   if (state.menuPlayers === 2) {
-    drawText("§ CONTROLES — J2", 670, 600, {
+    drawText("§ CONTROLES — J2", 670, 610, {
       font: FONT_MONO,
       size: 10,
       color: PLAYER_CONFIGS[1].color,
@@ -193,53 +168,43 @@ export function drawMenu(state) {
       weight: 700,
     });
     const c2 = [
-      ["↑↓←→", "mover"],
-      ["/", "interactuar / coger / dejar"],
-      [".", "descartar ticket (-8 pts)"],
+      [["↑", "↓", "←", "→"], "mover"],
+      [["/"], "interactuar / coger / dejar"],
+      [["."], "descartar ticket (-8 pts)"],
     ];
     for (let i = 0; i < c2.length; i++) {
-      drawText(c2[i][0], 670, 630 + i * 22, {
-        font: FONT_MONO,
-        size: 13,
-        weight: 700,
-        color: COL.ink,
-        letterSpacing: 1,
-      });
-      drawText(c2[i][1], 760, 630 + i * 22, {
-        font: FONT_SERIF,
-        size: 14,
-        italic: true,
-        color: COL.muted,
-      });
+      let kx = 670;
+      for (const k of c2[i][0]) kx += drawKeycap(kx, 624 + i * 32, k, UI.ink) + 4;
+      drawText(c2[i][1], 800, 641 + i * 32, { font: FONT_SERIF, size: 14, italic: true, color: UI.muted });
     }
   } else {
-    drawText("§ PUNTOS", 670, 600, {
+    drawText("§ PUNTOS", 670, 610, {
       font: FONT_MONO,
       size: 10,
-      color: COL.muted,
+      color: UI.muted,
       letterSpacing: 2,
       weight: 700,
     });
-    drawText("BUG · 10", 670, 632, { font: FONT_SERIF, size: 14, italic: true });
-    drawText("FEATURE · 12", 670, 654, { font: FONT_SERIF, size: 14, italic: true });
-    drawText("FEATURE + TDD · 25", 670, 676, { font: FONT_SERIF, size: 14, italic: true, color: COL.accent });
+    drawText("BUG · 10", 670, 642, { font: FONT_SERIF, size: 14, italic: true });
+    drawText("FEATURE · 12", 670, 666, { font: FONT_SERIF, size: 14, italic: true });
+    drawText("FEATURE + TDD · 25", 670, 690, { font: FONT_SERIF, size: 14, italic: true, color: UI.accent });
   }
 
-  // CTA
+  // CTA pulsante
   const pulse = (Math.sin(state.elapsed * 3) + 1) / 2;
-  ctx.globalAlpha = 0.5 + pulse * 0.5;
-  drawText("▸  SPACE · EMPEZAR        S · STUDIO  ◂", W / 2, 745, {
+  ctx.globalAlpha = 0.6 + pulse * 0.4;
+  drawPanel(W / 2 - 250, 726, 500, 40, { r: 20, fill: UI.ink, shadow: 3 });
+  drawText("▸  SPACE · EMPEZAR        S · STUDIO  ◂", W / 2, 751, {
     font: FONT_MONO,
-    size: 14,
+    size: 13,
     weight: 700,
-    color: COL.accent,
+    color: UI.cream,
     align: "center",
-    letterSpacing: 3,
+    letterSpacing: 2.5,
   });
   ctx.globalAlpha = 1;
 
-  drawLine(80, 770, W - 80, 770, COL.ink, 0.5);
-  // Show studio status if any skills purchased
+  // Estado del studio si hay skills compradas
   const sk = state.skills;
   const anySkills = sk.SPEED + sk.MODEL + sk.SUBAGENT > 0 || (sk.hours || 0) > 0;
   if (anySkills) {
@@ -250,10 +215,10 @@ export function drawMenu(state) {
     if (sk.CONTEXT > 0) parts.push(`CTX ${sk.CONTEXT}/${SKILL_DEFS.CONTEXT.maxLevel}`);
     if (sk.AUTOCOMPACT > 0) parts.push(`A-CPT ${sk.AUTOCOMPACT}/${SKILL_DEFS.AUTOCOMPACT.maxLevel}`);
     parts.push(`${sk.hours || 0}h`);
-    drawText("FORMACIÓN · " + parts.join("  ·  "), W / 2, 786, {
+    drawText("FORMACIÓN · " + parts.join("  ·  "), W / 2, 788, {
       font: FONT_MONO,
       size: 10,
-      color: COL.accent,
+      color: UI.accent,
       align: "center",
       letterSpacing: 2,
       weight: 700,
@@ -262,13 +227,13 @@ export function drawMenu(state) {
     drawText("© CLAUDE & CO.", 100, 788, {
       font: FONT_MONO,
       size: 9,
-      color: COL.muted,
+      color: UI.muted,
       letterSpacing: 1.5,
     });
     drawText("AUTO-AGENT PRESS", W - 100, 788, {
       font: FONT_MONO,
       size: 9,
-      color: COL.muted,
+      color: UI.muted,
       letterSpacing: 1.5,
       align: "right",
     });
@@ -279,76 +244,72 @@ export function drawMenu(state) {
 }
 
 export function drawShop(state) {
-  clear();
+  wash(0.9);
   const skills = state.skills;
 
-  // Header
-  drawLine(80, 90, W - 80, 90, COL.ink, 1.2);
-  drawLine(80, 94, W - 80, 94, COL.ink, 0.4);
   drawText("STUDIO UPGRADES", 100, 80, {
     font: FONT_MONO,
     size: 10,
     weight: 500,
-    color: COL.muted,
+    color: UI.muted,
     letterSpacing: 2.5,
   });
   drawText("META · PROGRESSION", W - 100, 80, {
     font: FONT_MONO,
     size: 10,
     weight: 500,
-    color: COL.muted,
+    color: UI.muted,
     letterSpacing: 2,
     align: "right",
   });
 
-  // Title
-  drawText("FORMACIÓN", W / 2, 175, {
+  // Título
+  drawText("FORMACIÓN", W / 2, 165, {
     font: FONT_SERIF,
-    size: 100,
+    size: 92,
     weight: 900,
     italic: true,
     align: "center",
-    color: COL.ink,
+    color: UI.ink,
   });
-  drawText("— invierte tus horas en habilidades —", W / 2, 205, {
+  drawText("— invierte tus horas en habilidades —", W / 2, 196, {
     font: FONT_MONO,
     size: 10,
-    color: COL.muted,
+    color: UI.muted,
     align: "center",
     letterSpacing: 2.5,
   });
 
-  // Hours available
+  // Horas disponibles en panel oscuro
   const hours = skills.hours || 0;
-  ctx.fillStyle = COL.ink;
-  ctx.fillRect(W / 2 - 200, 230, 400, 70);
-  drawText("HORAS DISPONIBLES", W / 2, 252, {
+  drawPanel(W / 2 - 190, 222, 380, 66, { r: 20, fill: UI.ink, shadow: 4 });
+  drawText("HORAS DISPONIBLES", W / 2, 246, {
     font: FONT_MONO,
-    size: 10,
-    color: COL.paper2,
+    size: 9,
+    color: "#C9C2B4",
     align: "center",
     letterSpacing: 2.5,
     weight: 500,
   });
-  drawText(String(hours).padStart(4, "0") + "h", W / 2, 290, {
+  drawText(String(hours).padStart(4, "0") + "h", W / 2, 278, {
     font: FONT_SERIF,
-    size: 36,
+    size: 32,
     weight: 900,
     italic: true,
-    color: COL.paper,
+    color: UI.cream,
     align: "center",
   });
 
-  // Skill cards en una rejilla de 3 columnas
+  // Cards de skills en rejilla de 3 columnas
   const skillKeys = ["SPEED", "MODEL", "SUBAGENT", "CONTEXT", "AUTOCOMPACT"];
   const cols = 3;
   const cardW = 360,
-    cardH = 190,
+    cardH = 188,
     gapX = 24,
     gapY = 18;
   const totalW = cardW * cols + gapX * (cols - 1);
   const startX = (W - totalW) / 2;
-  const startY = 320;
+  const startY = 312;
 
   for (let i = 0; i < skillKeys.length; i++) {
     const key = skillKeys[i];
@@ -362,110 +323,109 @@ export function drawShop(state) {
     const x = startX + col * (cardW + gapX);
     const cardY = startY + row * (cardH + gapY);
 
-    // Card background
-    ctx.fillStyle = COL.paper2;
-    ctx.fillRect(x, cardY, cardW, cardH);
-    ctx.strokeStyle = COL.ink;
-    ctx.lineWidth = 1.2;
-    ctx.strokeRect(x, cardY, cardW, cardH);
-    ctx.strokeStyle = COL.line;
-    ctx.lineWidth = 0.5;
-    ctx.strokeRect(x + 4, cardY + 4, cardW - 8, cardH - 8);
+    drawPanel(x, cardY, cardW, cardH, {
+      r: 18,
+      fill: UI.cream,
+      stroke: canAfford ? UI.accent : "#C4BAA0",
+      lw: canAfford ? 3 : 1.5,
+      shadow: 3,
+    });
 
-    // Hotkey badge
-    drawText("[" + (i + 1) + "]", x + 16, cardY + 26, {
+    // Hotkey + nombre corto
+    drawText("[" + (i + 1) + "]", x + 18, cardY + 28, {
       font: FONT_MONO,
       size: 12,
       weight: 700,
-      color: COL.accent,
+      color: UI.accent,
       letterSpacing: 1,
     });
-    drawText(def.short, x + cardW - 16, cardY + 26, {
+    drawText(def.short, x + cardW - 18, cardY + 28, {
       font: FONT_MONO,
       size: 10,
       weight: 500,
-      color: COL.muted,
+      color: UI.muted,
       letterSpacing: 2,
       align: "right",
     });
-    drawLine(x + 14, cardY + 34, x + cardW - 14, cardY + 34, COL.ink, 0.5);
 
-    // Label (left side of card)
-    drawText(def.label, x + 20, cardY + 70, {
+    // Label + descripción
+    drawText(def.label, x + 22, cardY + 68, {
       font: FONT_SERIF,
       size: 24,
       weight: 900,
       italic: true,
-      color: COL.ink,
+      color: UI.ink,
     });
-    // Description below label (left-aligned, deja sitio al botón a la derecha)
-    wrapText(def.desc, x + 20, cardY + 92, cardW - 168, 14, {
+    wrapText(def.desc, x + 22, cardY + 90, cardW - 170, 14, {
       font: FONT_SERIF,
       size: 11,
       italic: true,
-      color: COL.muted,
+      color: UI.muted,
       align: "left",
     });
 
-    // Level dots (bottom-left)
-    const dotsY = cardY + cardH - 38;
-    const dotSpacing = 16;
+    // Dots de nivel
+    const dotsY = cardY + cardH - 40;
     for (let j = 0; j < def.maxLevel; j++) {
-      const dx = x + 22 + j * dotSpacing;
+      const dx = x + 26 + j * 17;
       ctx.beginPath();
-      ctx.arc(dx, dotsY, 4.5, 0, TAU);
+      ctx.arc(dx, dotsY, 5, 0, TAU);
       if (j < level) {
-        ctx.fillStyle = COL.accent;
+        ctx.fillStyle = UI.accent;
         ctx.fill();
       } else {
-        ctx.strokeStyle = COL.line;
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = "#C4BAA0";
+        ctx.lineWidth = 1.5;
         ctx.stroke();
       }
     }
     const nivelText = `NIVEL ${level}/${def.maxLevel}` + (level > 0 ? "  ·  " + def.effectText(level) : "");
-    drawText(nivelText, x + 22, cardY + cardH - 14, {
+    drawText(nivelText, x + 22, cardY + cardH - 16, {
       font: FONT_MONO,
       size: 8,
-      color: level > 0 ? COL.ok : COL.muted,
+      color: level > 0 ? UI.ok : UI.muted,
       letterSpacing: 1,
       weight: 500,
     });
 
-    // Cost / button (right side of card)
-    const btnX = x + cardW - 138,
-      btnY = cardY + 48,
+    // Botón de coste a la derecha
+    const btnX = x + cardW - 140,
+      btnY = cardY + 44,
       btnW = 122,
-      btnH = 96;
-    ctx.strokeStyle = canAfford ? COL.accent : COL.line;
-    ctx.lineWidth = canAfford ? 1.5 : 0.8;
-    ctx.strokeRect(btnX, btnY, btnW, btnH);
+      btnH = 100;
+    drawPanel(btnX, btnY, btnW, btnH, {
+      r: 14,
+      fill: maxed ? "rgba(26,22,17,0.05)" : canAfford ? UI.accent : "rgba(26,22,17,0.05)",
+      stroke: maxed ? "#C4BAA0" : canAfford ? UI.ink : "#C4BAA0",
+      lw: 1.5,
+      shadow: canAfford ? 2 : 0,
+    });
     if (maxed) {
-      drawText("MAX", btnX + btnW / 2, btnY + 48, {
+      drawText("MAX", btnX + btnW / 2, btnY + 50, {
         font: FONT_SERIF,
         size: 26,
         weight: 900,
         italic: true,
-        color: COL.muted,
+        color: UI.muted,
         align: "center",
       });
-      drawText("LEVEL", btnX + btnW / 2, btnY + 72, {
+      drawText("LEVEL", btnX + btnW / 2, btnY + 74, {
         font: FONT_MONO,
         size: 9,
-        color: COL.muted,
+        color: UI.muted,
         align: "center",
         letterSpacing: 2,
       });
     } else {
-      drawText("SIGUIENTE", btnX + btnW / 2, btnY + 20, {
+      const buyColor = canAfford ? UI.cream : UI.muted;
+      drawText("SIGUIENTE", btnX + btnW / 2, btnY + 22, {
         font: FONT_MONO,
         size: 8,
-        color: COL.muted,
+        color: buyColor,
         align: "center",
         letterSpacing: 2,
       });
-      const buyColor = canAfford ? COL.accent : COL.muted;
-      drawText(nextCost + "h", btnX + btnW / 2, btnY + 52, {
+      drawText(nextCost + "h", btnX + btnW / 2, btnY + 56, {
         font: FONT_SERIF,
         size: 28,
         weight: 900,
@@ -473,7 +433,7 @@ export function drawShop(state) {
         color: buyColor,
         align: "center",
       });
-      drawText("pulsa [" + (i + 1) + "]", btnX + btnW / 2, btnY + 78, {
+      drawText("pulsa [" + (i + 1) + "]", btnX + btnW / 2, btnY + 82, {
         font: FONT_MONO,
         size: 9,
         color: buyColor,
@@ -484,51 +444,44 @@ export function drawShop(state) {
     }
   }
 
-  // Footer controls (encima de la línea, en el hueco bajo las cards)
+  // Controles del pie
   const pulse = (Math.sin(state.elapsed * 3) + 1) / 2;
   ctx.globalAlpha = 0.6 + pulse * 0.4;
-  drawText("SPACE · VOLVER AL MENÚ          R · RESET PROGRESO", W / 2, 748, {
+  drawText("SPACE · VOLVER AL MENÚ          R · RESET PROGRESO", W / 2, 758, {
     font: FONT_MONO,
     size: 12,
     weight: 700,
-    color: COL.ink,
+    color: UI.ink,
     align: "center",
     letterSpacing: 2.5,
   });
   ctx.globalAlpha = 1;
 
-  // Bottom rule — al mismo sitio que en la pantalla de inicio (y=770)
-  drawLine(80, 770, W - 80, 770, COL.ink, 0.5);
-
-  // Reset confirmation prompt
+  // Confirmación de reset
   if (state.shopResetConfirm) {
-    ctx.fillStyle = "rgba(26, 22, 17, 0.85)";
+    ctx.fillStyle = "rgba(26, 22, 17, 0.82)";
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = COL.paper;
-    ctx.fillRect(W / 2 - 280, H / 2 - 80, 560, 160);
-    ctx.strokeStyle = COL.red;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(W / 2 - 280, H / 2 - 80, 560, 160);
+    drawPanel(W / 2 - 290, H / 2 - 90, 580, 180, { r: 22, fill: UI.cream, stroke: UI.red, lw: 3, shadow: 5 });
     drawText("¿RESETEAR PROGRESO?", W / 2, H / 2 - 30, {
       font: FONT_SERIF,
       size: 28,
       weight: 900,
       italic: true,
-      color: COL.red,
+      color: UI.red,
       align: "center",
     });
     drawText("Perderás todas las horas y habilidades. Esto no se puede deshacer.", W / 2, H / 2 + 5, {
       font: FONT_SERIF,
       size: 13,
       italic: true,
-      color: COL.ink,
+      color: UI.ink,
       align: "center",
     });
     drawText("Y · CONFIRMAR        N · CANCELAR", W / 2, H / 2 + 50, {
       font: FONT_MONO,
       size: 12,
       weight: 700,
-      color: COL.ink,
+      color: UI.ink,
       align: "center",
       letterSpacing: 2.5,
     });
@@ -538,129 +491,127 @@ export function drawShop(state) {
 }
 
 export function drawGameOver(state) {
-  clear();
-  drawText("— END OF SHIFT —", W / 2, 100, {
+  wash(0.84);
+  drawText("— END OF SHIFT —", W / 2, 96, {
     font: FONT_MONO,
     size: 12,
-    color: COL.muted,
+    color: UI.muted,
     align: "center",
     letterSpacing: 4,
   });
-  drawLine(80, 130, W - 80, 130, COL.ink, 1.2);
-  drawLine(80, 134, W - 80, 134, COL.ink, 0.4);
 
-  drawText("PR", W / 2 - 260, 290, {
+  drawText("PR", W / 2 - 330, 270, {
     font: FONT_SERIF,
     size: 140,
     weight: 900,
     italic: true,
     align: "center",
-    color: COL.ink,
+    color: UI.ink,
   });
-  drawText("MERGED", W / 2 + 100, 290, {
+  drawText("MERGED", W / 2 + 90, 270, {
     font: FONT_SERIF,
     size: 140,
     weight: 900,
     align: "center",
-    color: COL.accent,
+    color: UI.accent,
   });
 
-  drawText("H. AHORRADAS", W / 2, 360, {
+  // Panel central de puntuación
+  drawPanel(W / 2 - 300, 312, 600, 270, { r: 24, fill: UI.cream, stroke: UI.ink, lw: 2.5, shadow: 5 });
+  drawText("H. AHORRADAS", W / 2, 348, {
     font: FONT_MONO,
     size: 10,
-    color: COL.muted,
+    color: UI.muted,
     align: "center",
     letterSpacing: 3,
     weight: 500,
   });
-  drawText(String(state.score).padStart(3, "0"), W / 2, 420, {
+  drawText(String(state.score).padStart(3, "0"), W / 2, 422, {
     font: FONT_SERIF,
     size: 80,
     weight: 900,
     italic: true,
     align: "center",
-    color: COL.ink,
+    color: UI.ink,
   });
 
-  // Hours earned
   const earned = state.earnedHours || 0;
   const totalHours = state.skills.hours || 0;
-  drawLine(W / 2 - 280, 460, W / 2 + 280, 460, COL.ink, 0.5);
-  drawText("+" + String(earned).padStart(3, "0") + "h", W / 2, 510, {
+  drawLine(W / 2 - 260, 448, W / 2 + 260, 448, "#C4BAA0", 1);
+  drawText("+" + String(earned).padStart(3, "0") + "h", W / 2, 502, {
     font: FONT_SERIF,
-    size: 48,
+    size: 44,
     weight: 900,
     italic: true,
-    color: COL.accent,
+    color: UI.accent,
     align: "center",
   });
-  drawText("« horas ganadas con IA »", W / 2, 538, {
+  drawText("« horas ganadas con IA »", W / 2, 528, {
     font: FONT_SERIF,
     size: 13,
     italic: true,
-    color: COL.muted,
+    color: UI.muted,
     align: "center",
   });
-  drawText("TOTAL · " + totalHours + "h disponibles", W / 2, 560, {
+  drawText("TOTAL · " + totalHours + "h disponibles", W / 2, 556, {
     font: FONT_MONO,
     size: 10,
-    color: COL.ink,
+    color: UI.ink,
     align: "center",
     letterSpacing: 2,
     weight: 700,
   });
-  drawLine(W / 2 - 280, 580, W / 2 + 280, 580, COL.ink, 0.5);
 
-  // Stats row
+  // Pills de stats
   const stats = [
-    ["PR ENVIADAS", String(state.shipped).padStart(2, "0")],
-    ["CON TDD", String(state.perfectFeatures).padStart(2, "0")],
-    ["EXPIRADAS", String(state.expired).padStart(2, "0")],
+    ["PR ENVIADAS", String(state.shipped).padStart(2, "0"), UI.ok],
+    ["CON TDD", String(state.perfectFeatures).padStart(2, "0"), UI.accent],
+    ["EXPIRADAS", String(state.expired).padStart(2, "0"), state.expired > 0 ? UI.red : UI.ink],
   ];
   for (let i = 0; i < stats.length; i++) {
-    const x = 320 + i * 220;
-    drawText(stats[i][0], x, 615, {
+    const x = W / 2 - 310 + i * 220;
+    drawPanel(x, 608, 200, 64, { r: 16, fill: UI.cream, stroke: UI.ink, lw: 2, shadow: 3 });
+    drawText(stats[i][0], x + 100, 630, {
       font: FONT_MONO,
       size: 9,
-      color: COL.muted,
+      color: UI.muted,
       align: "center",
       letterSpacing: 2,
     });
-    drawText(stats[i][1], x, 655, {
+    drawText(stats[i][1], x + 100, 660, {
       font: FONT_SERIF,
-      size: 36,
+      size: 30,
       weight: 900,
       italic: true,
-      color: COL.ink,
+      color: stats[i][2],
       align: "center",
     });
   }
-  drawLine(80, 680, W - 80, 680, COL.ink, 0.5);
 
   // CTAs
   const pulse = (Math.sin(state.elapsed * 4) + 1) / 2;
   ctx.globalAlpha = 0.7 + pulse * 0.3;
-  drawText("S · INVERTIR HORAS EN EL STUDIO", W / 2 - 220, 730, {
+  drawText("S · INVERTIR HORAS EN EL STUDIO", W / 2 - 220, 716, {
     font: FONT_MONO,
     size: 12,
     weight: 700,
-    color: COL.accent,
+    color: UI.accent,
     align: "center",
     letterSpacing: 2.5,
   });
-  drawText("SPACE · NUEVA PARTIDA", W / 2 + 220, 730, {
+  drawText("SPACE · NUEVA PARTIDA", W / 2 + 220, 716, {
     font: FONT_MONO,
     size: 12,
     weight: 700,
-    color: COL.ink,
+    color: UI.ink,
     align: "center",
     letterSpacing: 2.5,
   });
   ctx.globalAlpha = 1;
-  drawText("BEST · " + String(state.bestScore).padStart(3, "0"), W / 2, 770, {
+  drawText("BEST · " + String(state.bestScore).padStart(3, "0"), W / 2, 756, {
     font: FONT_MONO,
     size: 10,
-    color: COL.muted,
+    color: UI.muted,
     align: "center",
     letterSpacing: 2.5,
   });

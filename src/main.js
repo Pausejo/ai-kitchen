@@ -3,7 +3,7 @@
 import { createState } from "./state.js";
 import { createInput, consumePresses } from "./input.js";
 import { update } from "./systems/index.js";
-import { render } from "./render/index.js";
+import { render } from "./render3d/index.js";
 import { resetSkills, loadSkills, tryBuySkill } from "./skills.js";
 
 let state = null;
@@ -77,6 +77,7 @@ function loop(t) {
   if (state.phase === "playing") update(state, input, dt);
   routeInput(input);
   render(state);
+  globalThis.__aik = state; // hook de solo-lectura para arneses de prueba
   requestAnimationFrame(loop);
 }
 
