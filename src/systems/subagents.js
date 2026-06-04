@@ -47,21 +47,27 @@ export function updateSubagents(state, dt) {
       if (target.queue.length < target.capacity) {
         // Drop in now
         sa.state = "working";
-        target.queue.push({ ticket: sa.ticket, progress: 0, isSubagent: true, processMult: SUBAGENT_PROCESS_MULT });
+        target.queue.push({
+          ticket: sa.ticket,
+          progress: 0,
+          isSubagent: true,
+          subagentRef: sa,
+          processMult: SUBAGENT_PROCESS_MULT,
+        });
         sa.ticket = null; // it lives in the station queue now
       }
     } else if (sa.state === "working") {
       // Wait until our ticket has been processed in the target station, then pick it up.
       sa.isMoving = false;
       const target = sa.target;
-      // Find our entry (we marked it with isSubagent and subagentIdx)
+      // Find our entry (both push sites tag it with subagentRef)
       const entry = target.queue.find((e) => e.isSubagent && e.subagentRef === sa);
       if (!entry) {
-        // We were just pushed — tag it now
-        const lastEntry = target.queue[target.queue.length - 1];
-        if (lastEntry && lastEntry.isSubagent && !lastEntry.subagentRef) {
-          lastEntry.subagentRef = sa;
-        }
+        // Our ticket is gone from the queue (expired in updateTickets, or a
+        // player grabbed it): go home instead of waiting forever.
+        sa.state = "returning";
+        sa.target = null;
+        sa.ticket = null;
       } else if (entry.progress >= 1 && target.queue[0] === entry) {
         // Our ticket is the front and done — grab it
         sa.ticket = entry.ticket;
