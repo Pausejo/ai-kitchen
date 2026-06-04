@@ -132,6 +132,7 @@ const FLASH_COLOR = {
   "#8B2C20": UI.red, // COL.red
   "#C2410C": "#FFB38A", // COL.accent
   "#A88410": UI.warn, // COL.warn
+  "#4A6B2C": UI.ok, // COL.ok (+PLAN/+TDD/+CODE, los más frecuentes)
 };
 
 function drawFlashesProjected(state) {

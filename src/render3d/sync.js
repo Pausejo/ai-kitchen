@@ -2,7 +2,7 @@
 // actualizar posiciones/efectos, eliminar (con animación de salida) si sobra.
 // Sin ECS: la escena es función del mismo estado 2D que usaba el render plano.
 import { CONTEXT_MAX } from "../config.js";
-import { anyPlayerNearStation, nearestStation } from "../geometry.js";
+import { anyPlayerNearStation, nearestStation, playerNearStation } from "../geometry.js";
 import { getThree } from "./scene.js";
 import { pxToWorldX, pxToWorldZ } from "./project.js";
 import {
@@ -24,6 +24,7 @@ const dying = [];
 let lastSyncT = 0;
 let lastShipped = 0;
 let lastContext = 0;
+let lastStateRef = null; // detecta el reemplazo del state (partida nueva)
 let shipFxT = -1; // instante del último envío (anima el anillo en PR)
 
 function easeOutBack(k) {
@@ -50,12 +51,26 @@ export function syncScene(state, hint) {
   const dt = Math.min(0.05, lastSyncT ? t - lastSyncT : 0.016);
   lastSyncT = t;
 
+  // Partida nueva: main.js reemplaza el objeto state entero → resetear los
+  // diffs de contadores para no arrastrar valores de la partida anterior.
+  if (state !== lastStateRef) {
+    lastStateRef = state;
+    lastShipped = state.shipped;
+    lastContext = state.context;
+    shipFxT = -1;
+  }
   // Eventos detectados por diff de contadores (el estado no emite eventos).
   if (state.shipped > lastShipped) shipFxT = t;
-  if (state.shipped < lastShipped) shipFxT = -1; // nueva partida
   lastShipped = state.shipped;
-  const draining = state.context < lastContext - 0.001;
+  // Drenaje manual: el contexto baja Y hay un jugador quieto en COMPACT
+  // (la skill AUTO-COMPACT también baja el contexto, pero a distancia).
+  const contextDropped = state.context < lastContext - 0.001;
   lastContext = state.context;
+  const compactS = state.stations.find((st) => st.kind === "compact");
+  const draining =
+    contextDropped &&
+    !!compactS &&
+    state.players.some((p) => playerNearStation(p, compactS) && Math.abs(p.vx) + Math.abs(p.vy) <= 1);
 
   reconcile(scene, t, maps.stations, state.stations, (s) => s.id, makeStationGroup, (g, s) =>
     updateStation(g, s, state, hint, t, draining),
