@@ -317,12 +317,22 @@ function updateChef(g, p, state, t, dt) {
 
 // ── Subagentes ─────────────────────────────────────────────────────────────
 
+// La lógica 2D camina al CENTRO de la estación (los subagentes no tienen
+// colisión con muebles); dibujarlo ahí lo metería dentro del mueble. Para
+// el render se le mantiene DELANTE de la fila superior (muebles + encimera).
+function subagentDisplayPos(sa) {
+  const px = sa.x;
+  const py = px > 50 && px < 1145 && sa.y < 405 ? 405 : sa.y;
+  return { px, py };
+}
+
 function updateSubagent(g, sa, t, dt) {
   const ud = g.userData;
   g.visible = sa.state !== "idle";
   if (!g.visible) return;
-  g.position.x = pxToWorldX(sa.x);
-  g.position.z = pxToWorldZ(sa.y);
+  const dp = subagentDisplayPos(sa);
+  g.position.x = pxToWorldX(dp.px);
+  g.position.z = pxToWorldZ(dp.py);
   g.rotation.y = dampAngle(g.rotation.y, Math.atan2(sa.faceX, sa.faceY), 12, dt);
   ud.rig.position.y = 0.16 + Math.sin(t * 3 + sa.idx * 1.7) * 0.06;
   ud.rig.rotation.x = damp(ud.rig.rotation.x, sa.isMoving ? 0.12 : 0, 8, dt);
@@ -354,7 +364,10 @@ function collectTickets(state) {
     if (p.holding) out.push({ t: p.holding, kind: "held", x: p.x, y: p.y, h: 2.9 });
   }
   for (const sa of state.subagents) {
-    if (sa.ticket) out.push({ t: sa.ticket, kind: "held", x: sa.x, y: sa.y, h: 1.9 });
+    if (sa.ticket) {
+      const dp = subagentDisplayPos(sa);
+      out.push({ t: sa.ticket, kind: "held", x: dp.px, y: dp.py, h: 1.9 });
+    }
   }
   return out;
 }
