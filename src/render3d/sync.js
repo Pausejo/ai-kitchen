@@ -158,7 +158,7 @@ function updateStation(g, s, state, hint, t, draining) {
     const pulse = (Math.sin(t * 5) + 1) / 2;
     ud.spotMat.opacity = 0.4 + pulse * 0.45;
     ud.spotlight.scale.setScalar(1 + pulse * 0.07);
-    ud.arrow.position.y = 4.7 + Math.sin(t * 4) * 0.28;
+    ud.arrow.position.y = 6.0 + Math.sin(t * 4) * 0.28;
     ud.arrow.rotation.y = t * 2.2;
   }
 

@@ -480,7 +480,8 @@ export function makeStationGroup(s) {
   // Placa de nombre flotante
   ud.plateKey = stationPlateKey(s, accent);
   ud.plate = billboard(stationPlateTexture(s, accent), 2.9, 1.09);
-  ud.plate.position.y = s.kind === "subagent_box" ? 2.3 : s.id === "COMPACT" ? 3.0 : 3.75;
+  // Altas para no tapar el mueble: la placa flota claramente por encima.
+  ud.plate.position.y = s.kind === "subagent_box" ? 2.8 : s.id === "COMPACT" ? 4.0 : 5.0;
   g.add(ud.plate);
 
   if (s.id === "INBOX") buildInbox(g, fp, ud);

@@ -3042,7 +3042,8 @@
       // Placa de nombre flotante
       ud.plateKey = stationPlateKey(s, accent);
       ud.plate = billboard(stationPlateTexture(s, accent), 2.9, 1.09);
-      ud.plate.position.y = s.kind === "subagent_box" ? 2.3 : s.id === "COMPACT" ? 3.0 : 3.75;
+      // Altas para no tapar el mueble: la placa flota claramente por encima.
+      ud.plate.position.y = s.kind === "subagent_box" ? 2.8 : s.id === "COMPACT" ? 4.0 : 5.0;
       g.add(ud.plate);
 
       if (s.id === "INBOX") buildInbox(g, fp, ud);
@@ -3434,7 +3435,7 @@
         const pulse = (Math.sin(t * 5) + 1) / 2;
         ud.spotMat.opacity = 0.4 + pulse * 0.45;
         ud.spotlight.scale.setScalar(1 + pulse * 0.07);
-        ud.arrow.position.y = 4.7 + Math.sin(t * 4) * 0.28;
+        ud.arrow.position.y = 6.0 + Math.sin(t * 4) * 0.28;
         ud.arrow.rotation.y = t * 2.2;
       }
 
@@ -3805,7 +3806,7 @@
           }
           if (state.inbox.length >= 3) {
             const angry = state.inbox.length >= 5;
-            const a = project(s.x, s.y - s.h / 2, 4.6);
+            const a = project(s.x, s.y - s.h / 2, 6.3);
             outlinedText(angry ? "!! ANGRY USERS !!" : "USERS WAITING", a.x, a.y, {
               size: 14,
               color: angry ? UI.red : UI.warn,

@@ -114,7 +114,7 @@ function drawStationOverlays(state) {
       }
       if (state.inbox.length >= 3) {
         const angry = state.inbox.length >= 5;
-        const a = project(s.x, s.y - s.h / 2, 4.6);
+        const a = project(s.x, s.y - s.h / 2, 6.3);
         outlinedText(angry ? "!! ANGRY USERS !!" : "USERS WAITING", a.x, a.y, {
           size: 14,
           color: angry ? UI.red : UI.warn,
