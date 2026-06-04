@@ -3356,7 +3356,7 @@
         state.players.some((p) => playerNearStation(p, compactS) && Math.abs(p.vx) + Math.abs(p.vy) <= 1);
 
       reconcile(scene, t, maps.stations, state.stations, (s) => s.id, makeStationGroup, (g, s) =>
-        updateStation(g, s, state, hint, t, draining),
+        updateStation(g, s, state, hint, t, dt, draining),
       );
       reconcile(scene, t, maps.players, state.players, (p) => p.cfg.id, (p) => makeChefGroup(p.cfg), (g, p) =>
         updateChef(g, p, state, t, dt),
@@ -3425,8 +3425,15 @@
 
     // ── Estaciones ─────────────────────────────────────────────────────────────
 
-    function updateStation(g, s, state, hint, t, draining) {
+    function updateStation(g, s, state, hint, t, dt, draining) {
       const ud = g.userData;
+
+      // Las placas de nombre son ayuda del tutorial: al terminarlo se desvanecen
+      // y la cocina queda limpia (el mueble habla por sí solo).
+      const tutorialOn = state.learningPhase || state.subagentLearningPhase;
+      const pm = ud.plate.material;
+      pm.opacity = damp(pm.opacity, tutorialOn ? 1 : 0, 4, dt);
+      ud.plate.visible = pm.opacity > 0.02;
 
       // Highlight de proximidad (alfombrilla)
       const near = anyPlayerNearStation(s, state.players);
