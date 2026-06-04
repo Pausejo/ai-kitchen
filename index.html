@@ -3615,10 +3615,10 @@
 
     function ticketTarget(pl) {
       if (pl.kind === "inbox") {
-        // Colgado del rail de comandas (rail en y≈2.7, z≈sz+0.83)
+        // En fila sobre la encimera del INBOX, frente a la ventanilla
         const sx = pxToWorldX(pl.s.x);
         const sz = pxToWorldZ(pl.s.y);
-        return { x: sx - 1.35 + Math.min(pl.i, 3) * 0.92, y: 0.86, z: sz + 0.85, visible: pl.i < 4, scale: 0.8 };
+        return { x: sx - 1.4 + Math.min(pl.i, 3) * 0.8, y: 1.72, z: sz + 0.55, visible: pl.i < 4, scale: 0.75 };
       }
       if (pl.kind === "queue") {
         const sx = pxToWorldX(pl.s.x);
@@ -3800,12 +3800,22 @@
       }
     }
 
+    // Los sistemas emiten flashes con la paleta editorial (COL); los tonos
+    // oscuros no contrastan con el contorno oscuro del overlay → se remapean.
+    const FLASH_COLOR = {
+      "#1A1611": UI.cream, // COL.ink
+      "#6B6358": "#D9CFC0", // COL.muted
+      "#8B2C20": UI.red, // COL.red
+      "#C2410C": "#FFB38A", // COL.accent
+      "#A88410": UI.warn, // COL.warn
+    };
+
     function drawFlashesProjected(state) {
       for (const f of state.flashes) {
         const p = project(f.x, f.y, 2.5);
         outlinedText(f.text, p.x, p.y, {
           size: 15,
-          color: f.color,
+          color: FLASH_COLOR[f.color] || f.color,
           alpha: Math.max(0, Math.min(1, f.life)),
         });
       }

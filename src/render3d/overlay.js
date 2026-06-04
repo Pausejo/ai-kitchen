@@ -124,12 +124,22 @@ function drawStationOverlays(state) {
   }
 }
 
+// Los sistemas emiten flashes con la paleta editorial (COL); los tonos
+// oscuros no contrastan con el contorno oscuro del overlay → se remapean.
+const FLASH_COLOR = {
+  "#1A1611": UI.cream, // COL.ink
+  "#6B6358": "#D9CFC0", // COL.muted
+  "#8B2C20": UI.red, // COL.red
+  "#C2410C": "#FFB38A", // COL.accent
+  "#A88410": UI.warn, // COL.warn
+};
+
 function drawFlashesProjected(state) {
   for (const f of state.flashes) {
     const p = project(f.x, f.y, 2.5);
     outlinedText(f.text, p.x, p.y, {
       size: 15,
-      color: f.color,
+      color: FLASH_COLOR[f.color] || f.color,
       alpha: Math.max(0, Math.min(1, f.life)),
     });
   }

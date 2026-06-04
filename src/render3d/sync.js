@@ -339,10 +339,10 @@ function collectTickets(state) {
 
 function ticketTarget(pl) {
   if (pl.kind === "inbox") {
-    // Colgado del rail de comandas (rail en y≈2.7, z≈sz+0.83)
+    // En fila sobre la encimera del INBOX, frente a la ventanilla
     const sx = pxToWorldX(pl.s.x);
     const sz = pxToWorldZ(pl.s.y);
-    return { x: sx - 1.35 + Math.min(pl.i, 3) * 0.92, y: 0.86, z: sz + 0.85, visible: pl.i < 4, scale: 0.8 };
+    return { x: sx - 1.4 + Math.min(pl.i, 3) * 0.8, y: 1.72, z: sz + 0.55, visible: pl.i < 4, scale: 0.75 };
   }
   if (pl.kind === "queue") {
     const sx = pxToWorldX(pl.s.x);
