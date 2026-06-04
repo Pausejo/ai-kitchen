@@ -3,17 +3,10 @@
 // presión del inbox y la viñeta de contexto alto. Todo lee el estado y
 // proyecta posiciones con la cámara orto (fija → proyección estable).
 import { W, H, CONTEXT_MAX, FONT_MONO, FONT_SERIF } from "../config.js";
-import { ctx } from "../canvas2d.js";
+import { ctx, UI } from "../canvas2d.js";
 import { getThree } from "./scene.js";
 import { worldToOverlay, pxToWorldX, pxToWorldZ } from "./project.js";
 
-const INK = "#1A1611";
-const CREAM = "#FAF6EE";
-const RED = "#E5484D";
-const WARN = "#F2B70D";
-const OK = "#3FB68B";
-const MUTED = "#6B6358";
-const ACCENT = "#D97757";
 
 // Proyecta un punto 2D del estado (px) a coords del overlay, a altura wy.
 function project(px, py, wy) {
@@ -22,7 +15,7 @@ function project(px, py, wy) {
 }
 
 // Texto cartoon con contorno para legibilidad sobre la escena.
-function outlinedText(text, x, y, { size = 15, color = CREAM, font = FONT_MONO, weight = 700, align = "center", alpha = 1, italic = false } = {}) {
+function outlinedText(text, x, y, { size = 15, color = UI.cream, font = FONT_MONO, weight = 700, align = "center", alpha = 1, italic = false } = {}) {
   ctx.save();
   ctx.globalAlpha = alpha;
   ctx.font = `${italic ? "italic " : ""}${weight} ${size}px ${font}, monospace`;
@@ -67,40 +60,40 @@ function drawStationOverlays(state) {
       const done = front.progress >= 1;
       // Barra de progreso flotante sobre el mueble
       const b = project(s.x, s.y, 2.55);
-      progressBar(b.x, b.y, 86, 9, done ? 1 : front.progress, done ? OK : ACCENT);
+      progressBar(b.x, b.y, 86, 9, done ? 1 : front.progress, done ? UI.ok : UI.accent);
       // Contador de cola N/CAP junto a la barra
       const full = s.queue.length >= s.capacity;
       outlinedText(`${s.queue.length}/${s.capacity}`, b.x + 62, b.y, {
         size: 12,
-        color: full ? RED : s.queue.length >= 2 ? WARN : CREAM,
+        color: full ? UI.red : s.queue.length >= 2 ? UI.warn : UI.cream,
         align: "left",
       });
       // READY encima cuando está listo
       if (done) {
-        outlinedText("READY · PICK UP", b.x, b.y - 17, { size: 12, color: OK });
+        outlinedText("READY · PICK UP", b.x, b.y - 17, { size: 12, color: UI.ok });
       }
     }
 
     if (s.kind === "subagent_box") {
       const sa = state.subagents[s.subagentIdx];
       let text = "IDLE · DROP TICKET";
-      let color = MUTED;
+      let color = UI.muted;
       if (sa) {
         if (sa.state === "toStation" && sa.target) {
           text = "→ " + sa.target.label;
-          color = CREAM;
+          color = UI.cream;
         } else if (sa.state === "waiting") {
           text = "WAITING · QUEUE FULL";
-          color = WARN;
+          color = UI.warn;
         } else if (sa.state === "working") {
           text = "PROCESSING…";
-          color = CREAM;
+          color = UI.cream;
         } else if (sa.state === "toShip") {
           text = "→ SHIP PR";
-          color = ACCENT;
+          color = UI.accent;
         } else if (sa.state === "returning") {
           text = "RETURNING";
-          color = MUTED;
+          color = UI.muted;
         }
       }
       const p = project(s.x, s.y + s.h / 2 + 10, 0.0);
@@ -116,7 +109,7 @@ function drawStationOverlays(state) {
           font: FONT_SERIF,
           weight: 900,
           italic: true,
-          color: state.inbox.length >= 5 ? RED : ACCENT,
+          color: state.inbox.length >= 5 ? UI.red : UI.accent,
         });
       }
       if (state.inbox.length >= 3) {
@@ -124,7 +117,7 @@ function drawStationOverlays(state) {
         const a = project(s.x, s.y - s.h / 2, 4.6);
         outlinedText(angry ? "!! ANGRY USERS !!" : "USERS WAITING", a.x, a.y, {
           size: 14,
-          color: angry ? RED : WARN,
+          color: angry ? UI.red : UI.warn,
         });
       }
     }
@@ -150,7 +143,7 @@ function drawContextVignette(state) {
   const pulse = (Math.sin(t * (blocked ? 8 : 5)) + 1) / 2;
   ctx.save();
   ctx.globalAlpha = blocked ? 0.3 + pulse * 0.25 : hot ? 0.2 + pulse * 0.16 : 0.1 + pulse * 0.1;
-  ctx.strokeStyle = blocked || hot ? RED : WARN;
+  ctx.strokeStyle = blocked || hot ? UI.red : UI.warn;
   ctx.lineWidth = 26;
   ctx.strokeRect(8, 8, W - 16, H - 16);
   ctx.restore();

@@ -217,7 +217,7 @@ export function buildEnvironment(scene) {
 
   // Reloj de pared
   const clock = new THREE.Group();
-  clock.position.set(6.5, 4.9, wallZ + 0.4);
+  clock.position.set(9, 4.35, wallZ + 0.4);
   clock.add(mesh(geo("cyl", 0.62, 0.62, 0.14, 24), mat(PALETTE.cream)));
   clock.children[0].rotation.x = Math.PI / 2;
   clock.add(box(0.05, 0.4, 0.04, mat(PALETTE.ink), 0, 0.12, 0.09));
@@ -291,7 +291,7 @@ function buildTdd(g, fp, ud) {
   const topY = buildBase(g, fp, ud);
   // Báscula: columna + plato
   g.add(mesh(geo("cyl", 0.13, 0.2, 0.75, 12), mat(PALETTE.steel), -0.4, topY + 0.37, -0.2));
-  ud.fx.scalePlate = mesh(geo("cyl", 0.78, 0.7, 0.1, 20), mat(PALETTE.steel), -0.4, topY + 0.8, -0.2);
+  ud.fx.scalePlate = mesh(geo("cyl", 0.62, 0.56, 0.1, 20), mat("#A9AEB8"), -0.4, topY + 0.8, -0.2);
   ud.fx.scalePlateY = topY + 0.8;
   ud.fx.scalePlate.castShadow = true;
   g.add(ud.fx.scalePlate);
@@ -436,7 +436,7 @@ function buildDock(g, fp, ud) {
   plat.castShadow = true;
   plat.receiveShadow = true;
   g.add(plat);
-  g.add(box(fp.w - 0.3, 0.06, fp.d - 0.3, mat(PALETTE.ink2), 0, 0.27, 0));
+  g.add(box(fp.w - 0.3, 0.06, fp.d - 0.3, mat("#E8B33F"), 0, 0.27, 0));
   // Anillo de luz girando cuando el robot trabaja
   ud.fx.dockRing = mesh(
     geo("torus", Math.min(fp.w, fp.d) * 0.42, 0.05, 8, 28),
@@ -480,7 +480,7 @@ export function makeStationGroup(s) {
   // Placa de nombre flotante
   ud.plateKey = stationPlateKey(s, accent);
   ud.plate = billboard(stationPlateTexture(s, accent), 2.9, 1.09);
-  ud.plate.position.y = s.kind === "subagent_box" ? 2.3 : 3.75;
+  ud.plate.position.y = s.kind === "subagent_box" ? 2.3 : s.id === "COMPACT" ? 3.0 : 3.75;
   g.add(ud.plate);
 
   if (s.id === "INBOX") buildInbox(g, fp, ud);

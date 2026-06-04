@@ -4,6 +4,17 @@ import { COL, W, H, FONT_MONO, FONT_SERIF } from "./config.js";
 export const canvas = document.getElementById("game");
 export const ctx = canvas.getContext("2d");
 
+// Paleta cartoon del HUD/overlay (compartida por hud, screens y overlay 3D).
+export const UI = {
+  cream: "#FFF8EC",
+  ink: "#1A1611",
+  accent: "#D97757",
+  red: "#E5484D",
+  warn: "#F2B70D",
+  ok: "#3FB68B",
+  muted: "#6B6358",
+};
+
 export function clear() {
   ctx.fillStyle = COL.paper;
   ctx.fillRect(0, 0, W, H);
@@ -68,6 +79,30 @@ export function drawRect(x, y, w, h, opts = {}) {
     ctx.lineWidth = lw;
     ctx.strokeRect(x, y, w, h);
   }
+}
+
+// Panel redondeado estilo cartoon: relleno + borde + sombra opcional.
+export function drawPanel(x, y, w, h, opts = {}) {
+  const { r = 12, fill = "#FFF8EC", stroke, lw = 2, shadow = 0 } = opts;
+  ctx.save();
+  if (shadow) {
+    ctx.beginPath();
+    ctx.roundRect(x + shadow, y + shadow + 1, w, h, r);
+    ctx.fillStyle = "rgba(26,22,17,0.18)";
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.roundRect(x, y, w, h, r);
+  if (fill) {
+    ctx.fillStyle = fill;
+    ctx.fill();
+  }
+  if (stroke) {
+    ctx.strokeStyle = stroke;
+    ctx.lineWidth = lw;
+    ctx.stroke();
+  }
+  ctx.restore();
 }
 
 export function wrapText(text, x, y, maxW, lh, opts) {
