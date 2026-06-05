@@ -2415,6 +2415,34 @@
       });
     }
 
+    // Texto HUD con contorno (réplica del outlinedText del overlay) para planos
+    // del mundo 3D: a diferencia del overlay, el depth-test los oculta tras los
+    // personajes. Cacheado por texto+color y compartido entre estaciones.
+    function hudTextDims(text, px) {
+      return { w: Math.ceil(text.length * px * 0.64 + px), h: Math.ceil(px * 1.9) };
+    }
+
+    // Relación ancho/alto de la textura: dimensiona el plano sin leer tex.image.
+    function hudTextAspect(text, px = 36) {
+      const { w, h } = hudTextDims(text, px);
+      return w / h;
+    }
+
+    function hudTextTexture(text, color, px = 36) {
+      const { w, h } = hudTextDims(text, px);
+      return cachedTexture("hud:" + text + ":" + color, w, h, (g) => {
+        g.font = "700 " + px + "px " + FONT_MONO + ", monospace";
+        g.textAlign = "center";
+        g.textBaseline = "middle";
+        g.lineJoin = "round";
+        g.lineWidth = Math.max(3, px * 0.28);
+        g.strokeStyle = "rgba(26,22,17,0.85)";
+        g.strokeText(text, w / 2, h / 2);
+        g.fillStyle = color;
+        g.fillText(text, w / 2, h / 2);
+      });
+    }
+
     // ── Placa de nombre de estación ────────────────────────────────────────────
 
     function stationSubText(s) {
@@ -2745,23 +2773,9 @@
         scene.add(freeze(sw));
       }
 
-      // Encimera continua (más baja que los muebles, que sobresalen por encima)
-      const counterZ = pxToWorldZ(330);
-      const counter = box(26.2, 1.06, 2.4, mat(PALETTE.cabinet), -1.4, 0.53, counterZ);
-      counter.castShadow = true;
-      counter.receiveShadow = true;
-      scene.add(freeze(counter));
-      scene.add(freeze(box(26.4, 0.1, 2.6, mat(PALETTE.counter), -1.4, 1.11, counterZ)));
-
-      // Alfombra circular sutil que ancla la zona de juego
-      const rug = mesh(geo("circle", 3.6, 36), uniqueMat(PALETTE.rug, { opacity: 0.22 }), 0, 0.015, 1.6);
-      rug.rotation.x = -Math.PI / 2;
-      rug.receiveShadow = true;
-      scene.add(freeze(rug));
-
       // Props: plantas en las esquinas
       for (const [px, pz] of [
-        [-15.6, 5.6],
+        [-15.6, 8.6],
         [15.6, -6.2],
       ]) {
         const plant = new THREE.Group();
@@ -2983,11 +2997,23 @@
       spout.rotation.x = Math.PI / 2;
       g.add(spout);
       // Chorro de agua (visible drenando)
-      ud.fx.stream = mesh(geo("cyl", 0.05, 0.07, 0.85, 8), uniqueMat(PALETTE.cabinet, { opacity: 0.55 }), 0, h + 0.55, -fp.d * 0.32 + 0.62);
+      ud.fx.stream = mesh(
+        geo("cyl", 0.05, 0.07, 0.85, 8),
+        uniqueMat(PALETTE.cabinet, { opacity: 0.55 }),
+        0,
+        h + 0.55,
+        -fp.d * 0.32 + 0.62,
+      );
       ud.fx.stream.visible = false;
       g.add(ud.fx.stream);
       // Remolino
-      ud.fx.vortex = mesh(geo("torus", 0.4, 0.05, 8, 24), uniqueMat(PALETTE.cabinet, { basic: true, opacity: 0.7 }), 0, h + 0.14, 0);
+      ud.fx.vortex = mesh(
+        geo("torus", 0.4, 0.05, 8, 24),
+        uniqueMat(PALETTE.cabinet, { basic: true, opacity: 0.7 }),
+        0,
+        h + 0.14,
+        0,
+      );
       ud.fx.vortex.rotation.x = -Math.PI / 2;
       ud.fx.vortex.visible = false;
       g.add(ud.fx.vortex);
@@ -3016,6 +3042,36 @@
       ud.fx.dockRing.rotation.x = -Math.PI / 2;
       ud.fx.dockRing.visible = false;
       g.add(ud.fx.dockRing);
+    }
+
+    // HUD de cola (barra de progreso + contador N/CAP + READY) en la cara
+    // frontal del mueble. Son meshes de la escena —no overlay 2D— para que los
+    // personajes que pasan por delante los tapen con el depth-test.
+    function buildQueueHud(g, fp, ud) {
+      const grp = new THREE.Group();
+      // Separado del frente para que la barra inclinada no se hunda en el mueble
+      grp.position.set(0, 1.0, fp.d / 2 + 0.2);
+      grp.rotation.x = BILLBOARD_RX;
+      grp.visible = false;
+      ud.qhud = grp;
+      grp.add(box(2.5, 0.33, 0.04, mat(PALETTE.ink2, { basic: true }), 0, 0, 0));
+      ud.qbarMat = uniqueMat(PALETTE.accent, { basic: true });
+      ud.qbarFill = mesh(geo("lbox", 2.36, 0.21, 0.05), ud.qbarMat, -1.18, 0, 0.01);
+      grp.add(ud.qbarFill);
+      // Contador N/CAP a la derecha; sync.js cambia la textura cuando varía la cola
+      ud.qcountKey = "";
+      ud.qcountMat = uniqueMat("#FFFFFF", { basic: true, transparent: true, alphaTest: 0.05 });
+      ud.qcount = mesh(geo("plane", 1, 1), ud.qcountMat, 1.6, 0, 0.01);
+      grp.add(ud.qcount);
+      g.add(grp);
+      // READY · PICK UP por encima de la barra, sobre el borde de la encimera
+      const readyText = "READY · PICK UP";
+      const rh = 0.36;
+      ud.qready = billboard(hudTextTexture(readyText, PALETTE.ok), rh * hudTextAspect(readyText), rh);
+      // Alto y separado: libra la encimera del CODE (cuerpo 1.7 + perillas)
+      ud.qready.position.set(0, 2.05, fp.d / 2 + 0.3);
+      ud.qready.visible = false;
+      g.add(ud.qready);
     }
 
     function makeStationGroup(s) {
@@ -3060,6 +3116,8 @@
       else if (s.id === "COMPACT") buildCompact(g, fp, ud);
       else if (s.kind === "subagent_box") buildDock(g, fp, ud);
 
+      if (s.kind === "process") buildQueueHud(g, fp, ud);
+
       return g;
     }
 
@@ -3102,7 +3160,15 @@
 
       // Delantal blanco con logo Claude
       rig.add(box(0.64, 0.68, 0.14, mat(PALETTE.cream), 0, 0.78, 0.4));
-      rig.add(mesh(geo("plane", 0.42, 0.42), uniqueMat("#FFFFFF", { basic: true, map: logoTexture(cfg.color), transparent: true, alphaTest: 0.05 }), 0, 0.8, 0.48));
+      rig.add(
+        mesh(
+          geo("plane", 0.42, 0.42),
+          uniqueMat("#FFFFFF", { basic: true, map: logoTexture(cfg.color), transparent: true, alphaTest: 0.05 }),
+          0,
+          0.8,
+          0.48,
+        ),
+      );
 
       // Brazos con pivote en el hombro (se alzan al llevar un plato)
       ud.arms = [];
@@ -3171,9 +3237,19 @@
       ud.antennaTip = mesh(geo("sphere", 0.07, 8, 6), uniqueMat(PALETTE.bug, { basic: true }), 0, 1.38, 0);
       rig.add(ud.antennaTip);
       // Logo Claude pequeño
-      rig.add(mesh(geo("plane", 0.3, 0.3), uniqueMat("#FFFFFF", { basic: true, map: logoTexture(PALETTE.ink2), transparent: true, alphaTest: 0.05 }), 0, 0.4, 0.45));
+      rig.add(
+        mesh(
+          geo("plane", 0.3, 0.3),
+          uniqueMat("#FFFFFF", { basic: true, map: logoTexture(PALETTE.ink2), transparent: true, alphaTest: 0.05 }),
+          0,
+          0.4,
+          0.45,
+        ),
+      );
 
-      const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTexture("α" + (sa.idx + 1), PALETTE.accent), transparent: true }));
+      const tag = new THREE.Sprite(
+        new THREE.SpriteMaterial({ map: tagTexture("α" + (sa.idx + 1), PALETTE.accent), transparent: true }),
+      );
       tag.scale.set(0.95, 0.47, 1);
       tag.position.y = 2.85; // por encima del plato llevado (y≈1.9)
       g.add(tag);
@@ -3461,9 +3537,33 @@
         ud.plate.material.needsUpdate = true;
       }
 
-      // La barra de progreso vive en el overlay 2D (overlay.js): siempre visible.
       const front = s.kind === "process" && s.queue.length > 0 ? s.queue[0] : null;
       const processing = !!front && front.progress < 1;
+
+      // HUD de cola (barra + contador + READY): meshes en la cara frontal del
+      // mueble, así los personajes que pasan por delante los tapan.
+      if (s.kind === "process") {
+        const done = !!front && front.progress >= 1;
+        ud.qhud.visible = !!front;
+        ud.qready.visible = done;
+        if (front) {
+          ud.qbarFill.scale.x = Math.max(0.001, Math.min(1, front.progress));
+          ud.qbarMat.color.set(done ? PALETTE.ok : PALETTE.accent);
+          const n = s.queue.length;
+          const col = n >= s.capacity ? PALETTE.bug : n >= 2 ? PALETTE.warn : PALETTE.cream;
+          const text = n + "/" + s.capacity;
+          const ck = text + ":" + col;
+          if (ck !== ud.qcountKey) {
+            ud.qcountKey = ck;
+            ud.qcountMat.map = hudTextTexture(text, col);
+            ud.qcountMat.needsUpdate = true;
+            const ch = 0.34;
+            const cw = ch * hudTextAspect(text);
+            ud.qcount.scale.set(cw, ch, 1);
+            ud.qcount.position.x = 1.4 + cw / 2;
+          }
+        }
+      }
 
       switch (s.id) {
         case "INBOX": {
@@ -3754,45 +3854,11 @@
       drawContextVignette(state);
     }
 
-    // Barra de progreso redondeada estilo cartoon.
-    function progressBar(x, y, w, h, pct, color) {
-      ctx.save();
-      const r = h / 2;
-      ctx.beginPath();
-      ctx.roundRect(x - w / 2 - 2, y - h / 2 - 2, w + 4, h + 4, r + 2);
-      ctx.fillStyle = "rgba(26,22,17,0.82)";
-      ctx.fill();
-      if (pct > 0.02) {
-        ctx.beginPath();
-        ctx.roundRect(x - w / 2, y - h / 2, w * Math.min(1, pct), h, r);
-        ctx.fillStyle = color;
-        ctx.fill();
-      }
-      ctx.restore();
-    }
-
+    // La barra de progreso, el contador N/CAP y el READY de cada estación de
+    // proceso NO van aquí: son meshes 3D en la cara frontal del mueble
+    // (models.js buildQueueHud + sync.js), para que los personajes los tapen.
     function drawStationOverlays(state) {
       for (const s of state.stations) {
-        if (s.kind === "process" && s.queue.length > 0) {
-          const front = s.queue[0];
-          const done = front.progress >= 1;
-          // Barra de progreso sobre la cara frontal del mueble (borde
-          // delantero del footprint, justo bajo la tira de acento a y≈1.34)
-          const b = project(s.x, s.y + s.h / 2, 1.0);
-          progressBar(b.x, b.y, 86, 9, done ? 1 : front.progress, done ? UI.ok : UI.accent);
-          // Contador de cola N/CAP junto a la barra
-          const full = s.queue.length >= s.capacity;
-          outlinedText(`${s.queue.length}/${s.capacity}`, b.x + 62, b.y, {
-            size: 12,
-            color: full ? UI.red : s.queue.length >= 2 ? UI.warn : UI.cream,
-            align: "left",
-          });
-          // READY encima cuando está listo
-          if (done) {
-            outlinedText("READY · PICK UP", b.x, b.y - 17, { size: 12, color: UI.ok });
-          }
-        }
-
         if (s.kind === "subagent_box") {
           const sa = state.subagents[s.subagentIdx];
           let text = "IDLE · DROP TICKET";

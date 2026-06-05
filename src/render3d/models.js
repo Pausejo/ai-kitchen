@@ -13,6 +13,8 @@ import {
   tagTexture,
   stationPlateTexture,
   stationPlateKey,
+  hudTextTexture,
+  hudTextAspect,
   ticketCardTexture,
   ticketTextureKey,
 } from "./labels.js";
@@ -177,23 +179,9 @@ export function buildEnvironment(scene) {
     scene.add(freeze(sw));
   }
 
-  // Encimera continua (más baja que los muebles, que sobresalen por encima)
-  const counterZ = pxToWorldZ(330);
-  const counter = box(26.2, 1.06, 2.4, mat(PALETTE.cabinet), -1.4, 0.53, counterZ);
-  counter.castShadow = true;
-  counter.receiveShadow = true;
-  scene.add(freeze(counter));
-  scene.add(freeze(box(26.4, 0.1, 2.6, mat(PALETTE.counter), -1.4, 1.11, counterZ)));
-
-  // Alfombra circular sutil que ancla la zona de juego
-  const rug = mesh(geo("circle", 3.6, 36), uniqueMat(PALETTE.rug, { opacity: 0.22 }), 0, 0.015, 1.6);
-  rug.rotation.x = -Math.PI / 2;
-  rug.receiveShadow = true;
-  scene.add(freeze(rug));
-
   // Props: plantas en las esquinas
   for (const [px, pz] of [
-    [-15.6, 5.6],
+    [-15.6, 8.6],
     [15.6, -6.2],
   ]) {
     const plant = new THREE.Group();
@@ -415,11 +403,23 @@ function buildCompact(g, fp, ud) {
   spout.rotation.x = Math.PI / 2;
   g.add(spout);
   // Chorro de agua (visible drenando)
-  ud.fx.stream = mesh(geo("cyl", 0.05, 0.07, 0.85, 8), uniqueMat(PALETTE.cabinet, { opacity: 0.55 }), 0, h + 0.55, -fp.d * 0.32 + 0.62);
+  ud.fx.stream = mesh(
+    geo("cyl", 0.05, 0.07, 0.85, 8),
+    uniqueMat(PALETTE.cabinet, { opacity: 0.55 }),
+    0,
+    h + 0.55,
+    -fp.d * 0.32 + 0.62,
+  );
   ud.fx.stream.visible = false;
   g.add(ud.fx.stream);
   // Remolino
-  ud.fx.vortex = mesh(geo("torus", 0.4, 0.05, 8, 24), uniqueMat(PALETTE.cabinet, { basic: true, opacity: 0.7 }), 0, h + 0.14, 0);
+  ud.fx.vortex = mesh(
+    geo("torus", 0.4, 0.05, 8, 24),
+    uniqueMat(PALETTE.cabinet, { basic: true, opacity: 0.7 }),
+    0,
+    h + 0.14,
+    0,
+  );
   ud.fx.vortex.rotation.x = -Math.PI / 2;
   ud.fx.vortex.visible = false;
   g.add(ud.fx.vortex);
@@ -448,6 +448,36 @@ function buildDock(g, fp, ud) {
   ud.fx.dockRing.rotation.x = -Math.PI / 2;
   ud.fx.dockRing.visible = false;
   g.add(ud.fx.dockRing);
+}
+
+// HUD de cola (barra de progreso + contador N/CAP + READY) en la cara
+// frontal del mueble. Son meshes de la escena —no overlay 2D— para que los
+// personajes que pasan por delante los tapen con el depth-test.
+function buildQueueHud(g, fp, ud) {
+  const grp = new THREE.Group();
+  // Separado del frente para que la barra inclinada no se hunda en el mueble
+  grp.position.set(0, 1.0, fp.d / 2 + 0.2);
+  grp.rotation.x = BILLBOARD_RX;
+  grp.visible = false;
+  ud.qhud = grp;
+  grp.add(box(2.5, 0.33, 0.04, mat(PALETTE.ink2, { basic: true }), 0, 0, 0));
+  ud.qbarMat = uniqueMat(PALETTE.accent, { basic: true });
+  ud.qbarFill = mesh(geo("lbox", 2.36, 0.21, 0.05), ud.qbarMat, -1.18, 0, 0.01);
+  grp.add(ud.qbarFill);
+  // Contador N/CAP a la derecha; sync.js cambia la textura cuando varía la cola
+  ud.qcountKey = "";
+  ud.qcountMat = uniqueMat("#FFFFFF", { basic: true, transparent: true, alphaTest: 0.05 });
+  ud.qcount = mesh(geo("plane", 1, 1), ud.qcountMat, 1.6, 0, 0.01);
+  grp.add(ud.qcount);
+  g.add(grp);
+  // READY · PICK UP por encima de la barra, sobre el borde de la encimera
+  const readyText = "READY · PICK UP";
+  const rh = 0.36;
+  ud.qready = billboard(hudTextTexture(readyText, PALETTE.ok), rh * hudTextAspect(readyText), rh);
+  // Alto y separado: libra la encimera del CODE (cuerpo 1.7 + perillas)
+  ud.qready.position.set(0, 2.05, fp.d / 2 + 0.3);
+  ud.qready.visible = false;
+  g.add(ud.qready);
 }
 
 export function makeStationGroup(s) {
@@ -492,6 +522,8 @@ export function makeStationGroup(s) {
   else if (s.id === "COMPACT") buildCompact(g, fp, ud);
   else if (s.kind === "subagent_box") buildDock(g, fp, ud);
 
+  if (s.kind === "process") buildQueueHud(g, fp, ud);
+
   return g;
 }
 
@@ -534,7 +566,15 @@ export function makeChefGroup(cfg) {
 
   // Delantal blanco con logo Claude
   rig.add(box(0.64, 0.68, 0.14, mat(PALETTE.cream), 0, 0.78, 0.4));
-  rig.add(mesh(geo("plane", 0.42, 0.42), uniqueMat("#FFFFFF", { basic: true, map: logoTexture(cfg.color), transparent: true, alphaTest: 0.05 }), 0, 0.8, 0.48));
+  rig.add(
+    mesh(
+      geo("plane", 0.42, 0.42),
+      uniqueMat("#FFFFFF", { basic: true, map: logoTexture(cfg.color), transparent: true, alphaTest: 0.05 }),
+      0,
+      0.8,
+      0.48,
+    ),
+  );
 
   // Brazos con pivote en el hombro (se alzan al llevar un plato)
   ud.arms = [];
@@ -603,9 +643,19 @@ export function makeSubagentGroup(sa) {
   ud.antennaTip = mesh(geo("sphere", 0.07, 8, 6), uniqueMat(PALETTE.bug, { basic: true }), 0, 1.38, 0);
   rig.add(ud.antennaTip);
   // Logo Claude pequeño
-  rig.add(mesh(geo("plane", 0.3, 0.3), uniqueMat("#FFFFFF", { basic: true, map: logoTexture(PALETTE.ink2), transparent: true, alphaTest: 0.05 }), 0, 0.4, 0.45));
+  rig.add(
+    mesh(
+      geo("plane", 0.3, 0.3),
+      uniqueMat("#FFFFFF", { basic: true, map: logoTexture(PALETTE.ink2), transparent: true, alphaTest: 0.05 }),
+      0,
+      0.4,
+      0.45,
+    ),
+  );
 
-  const tag = new THREE.Sprite(new THREE.SpriteMaterial({ map: tagTexture("α" + (sa.idx + 1), PALETTE.accent), transparent: true }));
+  const tag = new THREE.Sprite(
+    new THREE.SpriteMaterial({ map: tagTexture("α" + (sa.idx + 1), PALETTE.accent), transparent: true }),
+  );
   tag.scale.set(0.95, 0.47, 1);
   tag.position.y = 2.85; // por encima del plato llevado (y≈1.9)
   g.add(tag);

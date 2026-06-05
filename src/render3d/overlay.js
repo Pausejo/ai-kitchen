@@ -36,45 +36,11 @@ export function drawPlayingOverlay(state) {
   drawContextVignette(state);
 }
 
-// Barra de progreso redondeada estilo cartoon.
-function progressBar(x, y, w, h, pct, color) {
-  ctx.save();
-  const r = h / 2;
-  ctx.beginPath();
-  ctx.roundRect(x - w / 2 - 2, y - h / 2 - 2, w + 4, h + 4, r + 2);
-  ctx.fillStyle = "rgba(26,22,17,0.82)";
-  ctx.fill();
-  if (pct > 0.02) {
-    ctx.beginPath();
-    ctx.roundRect(x - w / 2, y - h / 2, w * Math.min(1, pct), h, r);
-    ctx.fillStyle = color;
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
+// La barra de progreso, el contador N/CAP y el READY de cada estación de
+// proceso NO van aquí: son meshes 3D en la cara frontal del mueble
+// (models.js buildQueueHud + sync.js), para que los personajes los tapen.
 function drawStationOverlays(state) {
   for (const s of state.stations) {
-    if (s.kind === "process" && s.queue.length > 0) {
-      const front = s.queue[0];
-      const done = front.progress >= 1;
-      // Barra de progreso sobre la cara frontal del mueble (borde
-      // delantero del footprint, justo bajo la tira de acento a y≈1.34)
-      const b = project(s.x, s.y + s.h / 2, 1.0);
-      progressBar(b.x, b.y, 86, 9, done ? 1 : front.progress, done ? UI.ok : UI.accent);
-      // Contador de cola N/CAP junto a la barra
-      const full = s.queue.length >= s.capacity;
-      outlinedText(`${s.queue.length}/${s.capacity}`, b.x + 62, b.y, {
-        size: 12,
-        color: full ? UI.red : s.queue.length >= 2 ? UI.warn : UI.cream,
-        align: "left",
-      });
-      // READY encima cuando está listo
-      if (done) {
-        outlinedText("READY · PICK UP", b.x, b.y - 17, { size: 12, color: UI.ok });
-      }
-    }
-
     if (s.kind === "subagent_box") {
       const sa = state.subagents[s.subagentIdx];
       let text = "IDLE · DROP TICKET";

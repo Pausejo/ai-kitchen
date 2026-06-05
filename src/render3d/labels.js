@@ -180,6 +180,34 @@ export function tagTexture(text, color) {
   });
 }
 
+// Texto HUD con contorno (réplica del outlinedText del overlay) para planos
+// del mundo 3D: a diferencia del overlay, el depth-test los oculta tras los
+// personajes. Cacheado por texto+color y compartido entre estaciones.
+function hudTextDims(text, px) {
+  return { w: Math.ceil(text.length * px * 0.64 + px), h: Math.ceil(px * 1.9) };
+}
+
+// Relación ancho/alto de la textura: dimensiona el plano sin leer tex.image.
+export function hudTextAspect(text, px = 36) {
+  const { w, h } = hudTextDims(text, px);
+  return w / h;
+}
+
+export function hudTextTexture(text, color, px = 36) {
+  const { w, h } = hudTextDims(text, px);
+  return cachedTexture("hud:" + text + ":" + color, w, h, (g) => {
+    g.font = "700 " + px + "px " + FONT_MONO + ", monospace";
+    g.textAlign = "center";
+    g.textBaseline = "middle";
+    g.lineJoin = "round";
+    g.lineWidth = Math.max(3, px * 0.28);
+    g.strokeStyle = "rgba(26,22,17,0.85)";
+    g.strokeText(text, w / 2, h / 2);
+    g.fillStyle = color;
+    g.fillText(text, w / 2, h / 2);
+  });
+}
+
 // ── Placa de nombre de estación ────────────────────────────────────────────
 
 export function stationSubText(s) {

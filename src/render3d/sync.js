@@ -12,7 +12,7 @@ import {
   makeTicketGroup,
   PALETTE,
 } from "./models.js";
-import { ticketCardTexture, ticketTextureKey, disposeTicketTextures, stationPlateTexture, stationPlateKey, dropCachedTexture } from "./labels.js";
+import { ticketCardTexture, ticketTextureKey, disposeTicketTextures, stationPlateTexture, stationPlateKey, dropCachedTexture, hudTextTexture, hudTextAspect } from "./labels.js";
 
 const maps = {
   stations: new Map(),
@@ -178,9 +178,33 @@ function updateStation(g, s, state, hint, t, dt, draining) {
     ud.plate.material.needsUpdate = true;
   }
 
-  // La barra de progreso vive en el overlay 2D (overlay.js): siempre visible.
   const front = s.kind === "process" && s.queue.length > 0 ? s.queue[0] : null;
   const processing = !!front && front.progress < 1;
+
+  // HUD de cola (barra + contador + READY): meshes en la cara frontal del
+  // mueble, así los personajes que pasan por delante los tapan.
+  if (s.kind === "process") {
+    const done = !!front && front.progress >= 1;
+    ud.qhud.visible = !!front;
+    ud.qready.visible = done;
+    if (front) {
+      ud.qbarFill.scale.x = Math.max(0.001, Math.min(1, front.progress));
+      ud.qbarMat.color.set(done ? PALETTE.ok : PALETTE.accent);
+      const n = s.queue.length;
+      const col = n >= s.capacity ? PALETTE.bug : n >= 2 ? PALETTE.warn : PALETTE.cream;
+      const text = n + "/" + s.capacity;
+      const ck = text + ":" + col;
+      if (ck !== ud.qcountKey) {
+        ud.qcountKey = ck;
+        ud.qcountMat.map = hudTextTexture(text, col);
+        ud.qcountMat.needsUpdate = true;
+        const ch = 0.34;
+        const cw = ch * hudTextAspect(text);
+        ud.qcount.scale.set(cw, ch, 1);
+        ud.qcount.position.x = 1.4 + cw / 2;
+      }
+    }
+  }
 
   switch (s.id) {
     case "INBOX": {
